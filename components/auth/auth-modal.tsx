@@ -155,9 +155,14 @@ export function AuthModal({ open, onOpenChange, defaultMode = "login" }: AuthMod
       <DialogContent className="sm:max-w-md glass-card border-border/50 rounded-2xl">
         <DialogHeader className="space-y-3">
           <div className="flex items-center justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <Sparkles className="h-6 w-6" />
+            <div className="flex items-center gap-2 flex h-18 w-18 items-center justify-center rounded-2xl text-primary-foreground">
+              <img src="/Eureka-01.png" alt="Eureka" className="h-16 w-16 rounded-lg" /> <br />
+              {/* <p className="text-lg font-semibold">Eureka</p> */}
             </div>
+
+            {/* <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+              <img src="/Eureka-01.png" alt="Eureka" className="h-8 w-8 rounded-lg" />
+            </div> */}
           </div>
           <DialogTitle className="text-center text-2xl font-bold">
             {mode === "login" && "Welcome Back"}

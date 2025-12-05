@@ -2,6 +2,8 @@
 
 import { Upload, Brain, MessageSquare, Bell, Download, Shield } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { motion } from "framer-motion"
+import { FadeInUp, StaggerContainer, StaggerItem, FloatingIcon } from "@/components/animations"
 
 const features = [
   {
@@ -53,28 +55,37 @@ export function FeaturesSection() {
   return (
     <section className="px-4 py-20 bg-muted/30">
       <div className="mx-auto max-w-6xl">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold sm:text-4xl text-balance">Everything you need to study effectively</h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto text-pretty">
-            Eureka combines the power of AI with intuitive design to transform how you learn.
-          </p>
-        </div>
+        <FadeInUp delay={0}>
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold sm:text-4xl text-balance">Everything you need to study effectively</h2>
+            <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto text-pretty">
+              Eureka combines the power of AI with intuitive design to transform how you learn.
+            </p>
+          </div>
+        </FadeInUp>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, index) => (
-            <div
-              key={feature.title}
-              className="glass-card rounded-2xl p-6 transition-all hover:scale-[1.02] hover:shadow-xl animate-slide-up"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <div className={cn("mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl", feature.bgColor)}>
-                <feature.icon className={cn("h-6 w-6", feature.color)} />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground">{feature.title}</h3>
-              <p className="mt-2 text-muted-foreground">{feature.description}</p>
-            </div>
-          ))}
-        </div>
+        <StaggerContainer delay={0.1}>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature) => (
+              <StaggerItem key={feature.title}>
+                <motion.div whileHover={{ y: -10, scale: 1.02 }} transition={{ type: "spring", stiffness: 300 }}>
+                  <div className="glass-card rounded-2xl p-6 transition-all hover:shadow-xl h-full">
+                    <motion.div
+                      className={cn("mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl", feature.bgColor)}
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                    >
+                      <FloatingIcon delay={0.5}>
+                        <feature.icon className={cn("h-6 w-6", feature.color)} />
+                      </FloatingIcon>
+                    </motion.div>
+                    <h3 className="text-lg font-semibold text-foreground">{feature.title}</h3>
+                    <p className="mt-2 text-muted-foreground">{feature.description}</p>
+                  </div>
+                </motion.div>
+              </StaggerItem>
+            ))}
+          </div>
+        </StaggerContainer>
       </div>
     </section>
   )

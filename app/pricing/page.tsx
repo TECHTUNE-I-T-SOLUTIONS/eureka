@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Check, X, Zap } from "lucide-react"
 
 export default function PricingPage() {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
     const getUser = async () => {

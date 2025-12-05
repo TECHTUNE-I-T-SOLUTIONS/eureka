@@ -7,8 +7,8 @@ import { createClient } from "@/lib/supabase/client"
 import { HelpCircle, ChevronDown } from "lucide-react"
 
 export default function FAQPage() {
-  const [user, setUser] = useState(null)
-  const [expandedId, setExpandedId] = useState(null)
+  const [user, setUser] = useState<any>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     const getUser = async () => {
@@ -169,7 +169,7 @@ export default function FAQPage() {
     },
   ]
 
-  const toggleQuestion = (id) => {
+  const toggleQuestion = (id: string) => {
     setExpandedId(expandedId === id ? null : id)
   }
 

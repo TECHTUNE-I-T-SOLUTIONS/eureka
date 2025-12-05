@@ -8,7 +8,7 @@ import { Mail, MessageCircle, MapPin, Clock, Send, Github, Linkedin, Twitter } f
 import { toast } from "sonner"
 
 export default function ContactPage() {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<any>(null)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -35,7 +35,7 @@ export default function ContactPage() {
     getUser()
   }, [])
 
-  const handleChange = (e) => {
+  const handleChange = (e: any) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -43,7 +43,7 @@ export default function ContactPage() {
     }))
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault()
     setLoading(true)
 

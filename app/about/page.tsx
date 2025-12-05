@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Lightbulb, Users, Zap, Target, Award, Heart } from "lucide-react"
 
 export default function AboutPage() {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
     const getUser = async () => {

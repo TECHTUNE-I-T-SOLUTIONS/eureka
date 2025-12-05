@@ -16,8 +16,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Sparkles, Menu, X, LogOut, Settings } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Menu, X, LogOut, Settings } from "lucide-react"
 import { toast } from "sonner"
 import type { User } from "@supabase/supabase-js"
 
@@ -54,9 +54,7 @@ export function Navbar({ user }: NavbarProps) {
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* Logo */}
           <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Sparkles className="h-5 w-5" />
-            </div>
+            <img src="/Eureka-01.png" alt="Eureka" className="h-9 w-9 rounded-xl" />
             <span className="text-xl font-bold">Eureka</span>
           </Link>
 

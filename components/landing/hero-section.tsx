@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { AuthModal } from "@/components/auth/auth-modal"
-import { Sparkles, BookOpen, MessageCircle, Zap, ArrowRight } from "lucide-react"
+import { BookOpen, MessageCircle, Zap, ArrowRight } from "lucide-react"
 
 export function HeroSection() {
   const [authOpen, setAuthOpen] = useState(false)
@@ -29,7 +29,7 @@ export function HeroSection() {
           <div className="flex flex-col items-center text-center">
             {/* Badge */}
             <div className="animate-fade-in mb-8 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary">
-              <Sparkles className="h-4 w-4" />
+              <img src="/Eureka-01.png" alt="Eureka" className="h-4 w-4 rounded" />
               Your Personal Discovery Engine
             </div>
 

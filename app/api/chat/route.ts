@@ -1,8 +1,78 @@
 import { createClient } from "@/lib/supabase/server"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { NextResponse } from "next/server"
+import { openrouterChat, PAID_MODELS } from "@/lib/ai/openrouter"
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY)
+// Simple in-memory rate limiter to prevent overwhelming the API
+const requestQueue: { resolve: (v: any) => void; reject: (e: any) => void; fn: () => Promise<string> }[] = []
+let isProcessing = false
+let lastRequestTime = 0
+const MIN_REQUEST_INTERVAL = 2000 // Minimum 2 seconds between requests
+
+async function processQueue() {
+  if (isProcessing || requestQueue.length === 0) return
+
+  isProcessing = true
+
+  while (requestQueue.length > 0) {
+    const now = Date.now()
+    const timeSinceLastRequest = now - lastRequestTime
+
+    // Enforce minimum interval between requests
+    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+      const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest
+      await new Promise((resolve) => setTimeout(resolve, waitTime))
+    }
+
+    const item = requestQueue.shift()
+    if (item) {
+      try {
+        const result = await item.fn()
+        item.resolve(result)
+      } catch (error) {
+        item.reject(error)
+      }
+      lastRequestTime = Date.now()
+    }
+  }
+
+  isProcessing = false
+}
+
+// Queued request handler
+async function queuedGenerateContent(model: any, prompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    requestQueue.push({
+      fn: async () => {
+        try {
+          const result = await model.generateContent(prompt)
+          return result.response.text()
+        } catch (error: any) {
+          const errorMessage = error?.message || JSON.stringify(error)
+          const statusCode = error?.status || error?.statusCode
+
+          const is429 =
+            statusCode === 429 ||
+            errorMessage.includes("429") ||
+            errorMessage.includes("Too Many Requests") ||
+            errorMessage.includes("quota") ||
+            errorMessage.includes("Quota exceeded") ||
+            errorMessage.includes("rate limit") ||
+            errorMessage.includes("RESOURCE_EXHAUSTED")
+
+          if (is429) {
+            console.error("Quota exceeded - free tier limit reached")
+            return null as any
+          }
+          throw error
+        }
+      },
+      resolve,
+      reject,
+    })
+
+    processQueue()
+  })
+}
 
 export async function POST(request: Request) {
   try {
@@ -100,9 +170,40 @@ ${context ? `## Context from Their Notes:\n${context}\n\nUse this context to pro
 - Provide specific examples from their notes when relevant
 - Be concise but never sacrifice clarity for brevity`
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-    const result = await model.generateContent(`${systemPrompt}\n\nStudent's question: ${message}`)
-    const text = result.response.text()
+    // Use OpenRouter paid models with fallback
+    let text: string | null = null
+    try {
+      const result = await openrouterChat({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: message },
+        ],
+        modelList: PAID_MODELS,
+        temperature: 0.7,
+        max_tokens: 2048,
+      })
+      text = result.content
+    } catch (err) {
+      // All models failed
+      return NextResponse.json(
+        {
+          error:
+            "All AI models failed or are at capacity. Please try again later or check your OpenRouter account.",
+          code: "QUOTA_EXCEEDED",
+        },
+        { status: 429 },
+      )
+    }
+    if (!text) {
+      return NextResponse.json(
+        {
+          error:
+            "The AI service is temporarily at capacity. Please try again in a few moments.",
+          code: "QUOTA_EXCEEDED",
+        },
+        { status: 429 },
+      )
+    }
 
     // Save assistant message
     const { data: assistantMessage, error: assistantMsgError } = await supabase

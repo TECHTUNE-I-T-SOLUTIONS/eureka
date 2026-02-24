@@ -140,17 +140,35 @@ export function ChatPageClient({
         }),
       })
 
-      if (!response.ok) throw new Error("Failed to send message")
-
       const data = await response.json()
+
+      // Handle rate limiting (429)
+      if (response.status === 429) {
+        const retryAfter = data.retryAfter ? Math.ceil(data.retryAfter / 60) : 1
+        toast.error(
+          data.error || `Free tier quota exceeded. Please try again in ${retryAfter} hour(s).`,
+          {
+            action: {
+              label: "Upgrade",
+              onClick: () => window.open("https://aistudio.google.com/api-keys", "_blank"),
+            },
+          }
+        )
+        setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")))
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send message")
+      }
 
       // Update messages with actual data
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => !m.id.startsWith("temp-"))
         return [...withoutTemp, data.userMessage, data.assistantMessage]
       })
-    } catch {
-      toast.error("Failed to send message")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send message")
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")))
     } finally {
       setIsSending(false)

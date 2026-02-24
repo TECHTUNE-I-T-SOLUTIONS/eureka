@@ -24,6 +24,7 @@ interface UploadModalProps {
 export function UploadModal({ open, onOpenChange, onNoteCreated }: UploadModalProps) {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
+  const [showFullContent, setShowFullContent] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -253,13 +254,30 @@ export function UploadModal({ open, onOpenChange, onNoteCreated }: UploadModalPr
 
           <div className="space-y-2">
             <Label htmlFor="content">Or paste/type your notes</Label>
-            <Textarea
-              id="content"
-              placeholder="Paste your notes here..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="min-h-[200px] rounded-xl resize-none"
-            />
+            <div className="relative">
+              <Textarea
+                id="content"
+                placeholder="Paste your notes here..."
+                value={showFullContent ? content : content.slice(0, 1000)}
+                onChange={(e) => setContent(e.target.value)}
+                className="min-h-[200px] rounded-xl resize-none"
+                style={showFullContent ? {} : { height: '200px', overflowY: 'auto' }}
+                readOnly={!!uploadedFile}
+              />
+              {content.length > 1000 && (
+                <div className="absolute right-2 bottom-2 z-10">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs px-2 py-1"
+                    onClick={() => setShowFullContent((v) => !v)}
+                  >
+                    {showFullContent ? "Show less" : `Show full (${content.length} chars)`}
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">

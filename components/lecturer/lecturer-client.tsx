@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -28,14 +28,25 @@ import {
   MessageCircle,
   Lightbulb,
   X,
+  History,
+  Clock,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+
 import { cn } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 import ReactMarkdown from "react-markdown"
 
 interface Note {
   id: string
   title: string
+  created_at: string
+}
+
+interface Lecture {
+  id: string
+  title: string
+  note_id: string | null
+  explanation_level: string
   created_at: string
 }
 
@@ -53,15 +64,19 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [input, setInput] = useState("")
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([])
+  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string; id?: number }>>([])
   const [currentExplanation, setCurrentExplanation] = useState("")
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
   const [noteContent, setNoteContent] = useState("")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [lectures, setLectures] = useState<Lecture[]>([])
+  const [currentLectureId, setCurrentLectureId] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     // Initialize speech recognition
@@ -89,6 +104,11 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       }
     }
 
+    // Initialize audio element
+    if (typeof window !== "undefined") {
+      audioRef.current = new Audio()
+    }
+
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop()
@@ -96,12 +116,148 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       if (speechRef.current) {
         window.speechSynthesis.cancel()
       }
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
     }
   }, [])
 
   useEffect(() => {
     scrollToBottom()
+    console.log("Messages updated:", messages)
   }, [messages])
+
+  useEffect(() => {
+    fetchLectures()
+  }, [])
+
+  const fetchLectures = async () => {
+    try {
+      const response = await fetch("/api/lectures")
+      if (!response.ok) {
+        console.log("Lectures API not available yet")
+        return
+      }
+      const data = await response.json()
+      setLectures(data)
+    } catch (error) {
+      console.log("Lectures feature not available yet")
+    }
+  }
+
+  const createNewLecture = async () => {
+    try {
+      const response = await fetch("/api/lectures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          noteId: selectedNoteId,
+          title: selectedNoteId ? `Lecture on ${notes.find(n => n.id === selectedNoteId)?.title}` : "Free Lecture",
+          explanationLevel,
+        }),
+      })
+
+      if (!response.ok) {
+        console.log("Lectures API not available - running without history")
+        setCurrentLectureId(null)
+        setMessages([])
+        setCurrentExplanation("")
+        setSuggestedQuestions([])
+        toast.success("New lecture started (history not available)")
+        return
+      }
+
+      const lecture = await response.json()
+      console.log("Created lecture:", lecture)
+      setCurrentLectureId(lecture.id)
+      setMessages([])
+      setCurrentExplanation("")
+      setSuggestedQuestions([])
+      fetchLectures()
+      toast.success("New lecture started")
+    } catch (error) {
+      console.log("Lectures feature not available - running without history")
+      setCurrentLectureId(null)
+      setMessages([])
+      setCurrentExplanation("")
+      setSuggestedQuestions([])
+      toast.success("New lecture started (history not available)")
+    }
+  }
+
+  const loadLecture = async (lectureId: string) => {
+    try {
+      // Fetch lecture messages
+      const response = await fetch(`/api/lectures/${lectureId}/messages`)
+      if (!response.ok) {
+        toast.error("Failed to load lecture")
+        return
+      }
+
+      const messages = await response.json()
+      console.log("Loaded messages:", messages)
+
+      // Find lecture details from the lectures state
+      const lecture = lectures.find(l => l.id === lectureId)
+      if (lecture) {
+        setCurrentLectureId(lecture.id)
+        setSelectedNoteId(lecture.note_id)
+        setExplanationLevel(lecture.explanation_level as any)
+
+        if (messages && messages.length > 0) {
+          const mappedMessages = messages.map(m => ({ role: m.sender as "user" | "assistant", content: m.content }))
+          console.log("Mapped messages:", mappedMessages)
+          setMessages(mappedMessages)
+
+          // Set current explanation to the last assistant message
+          const lastAssistantMessage = [...mappedMessages].reverse().find(m => m.role === "assistant")
+          if (lastAssistantMessage) {
+            setCurrentExplanation(lastAssistantMessage.content)
+          }
+        } else {
+          setMessages([])
+          setCurrentExplanation("")
+        }
+
+        // Also fetch note content if a note is selected
+        if (lecture.note_id) {
+          await fetchNoteContent(lecture.note_id)
+        }
+
+        setShowHistory(false)
+        toast.success("Lecture loaded")
+      }
+    } catch (error) {
+      console.error("Error loading lecture:", error)
+      toast.error("Failed to load lecture")
+    }
+  }
+
+  const saveMessage = async (role: "user" | "assistant", content: string) => {
+    if (!currentLectureId) {
+      // Create lecture if it doesn't exist
+      await createNewLecture()
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/lectures/${currentLectureId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender: role,
+          content,
+        }),
+      })
+
+      if (!response.ok) {
+        console.log("Failed to save message - lectures feature might not be available")
+      }
+    } catch (error) {
+      console.log("Lectures feature not available")
+    }
+  }
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -157,22 +313,59 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
     }
   }
 
-  const speakText = (text: string) => {
-    if (!window.speechSynthesis) {
-      toast.error("Text-to-speech not supported")
-      return
-    }
-
+  const speakText = async (text: string) => {
     if (isSpeaking) {
       window.speechSynthesis.cancel()
       setIsSpeaking(false)
       return
     }
 
+    try {
+      setIsSpeaking(true)
+
+      // Try Gemini TTS API first
+      const response = await fetch("/api/lecturer/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.useBrowserTTS) {
+          // API indicates to use browser TTS
+          speakWithBrowser(text)
+        } else {
+          // Use the audio from API (if implemented)
+          speakWithBrowser(text)
+        }
+      } else {
+        // Fallback to browser TTS
+        speakWithBrowser(text)
+      }
+    } catch (error) {
+      console.error("TTS error:", error)
+      // Fallback to browser TTS
+      speakWithBrowser(text)
+    }
+  }
+
+  const speakWithBrowser = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 1
     utterance.pitch = 1
     utterance.volume = 1
+
+    // Get best available voice
+    const voices = window.speechSynthesis.getVoices()
+    const preferredVoice = voices.find(
+      (voice) =>
+        voice.lang.includes("en") &&
+        (voice.name.includes("Google") || voice.name.includes("Natural") || voice.name.includes("Enhanced")),
+    )
+    if (preferredVoice) {
+      utterance.voice = preferredVoice
+    }
 
     utterance.onend = () => {
       setIsSpeaking(false)
@@ -182,9 +375,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       setIsSpeaking(false)
     }
 
-    speechRef.current = utterance
     window.speechSynthesis.speak(utterance)
-    setIsSpeaking(true)
   }
 
   const stopSpeaking = () => {
@@ -201,12 +392,31 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       return
     }
 
+    // Create lecture if not exists and wait for it
+    if (!currentLectureId) {
+      await createNewLecture()
+      // Wait a bit for state to update
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    // If still no lecture ID, continue without saving to history
+    if (!currentLectureId) {
+      console.log("No lecture ID available, continuing without history")
+    }
+
     setIsLoading(true)
     const userMessage = question || "Please explain this note in detail"
     setInput("")
 
     // Add user message
     setMessages((prev) => [...prev, { role: "user", content: userMessage }])
+    if (currentLectureId) {
+      await saveMessage("user", userMessage)
+    }
+
+    // Add temporary loading message
+    const loadingId = Date.now()
+    setMessages((prev) => [...prev, { role: "assistant", content: "LOADING", id: loadingId }])
 
     try {
       const response = await fetch("/api/lecturer/ask", {
@@ -226,17 +436,20 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
 
       const data = await response.json()
 
-      // Add assistant message
+      // Replace loading message with actual response
+      setMessages((prev) => prev.filter((m) => m.id !== loadingId))
       setMessages((prev) => [...prev, { role: "assistant", content: data.answer }])
       setCurrentExplanation(data.answer)
       setSuggestedQuestions(data.suggestedQuestions || [])
-
-      // Auto-speak the response (optional - can be made configurable)
-      // speakText(data.answer)
+      if (currentLectureId) {
+        await saveMessage("assistant", data.answer)
+      }
     } catch (error) {
       toast.error("Failed to get explanation", {
         description: "Please try again.",
       })
+      // Remove loading message and user message
+      setMessages((prev) => prev.filter((m) => m.id !== loadingId))
       setMessages((prev) => prev.slice(0, -1))
     } finally {
       setIsLoading(false)
@@ -281,6 +494,14 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
           className="rounded-xl"
         >
           <Settings className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={() => setShowHistory(true)}
+          variant="outline"
+          size="icon"
+          className="rounded-xl"
+        >
+          <History className="h-5 w-5" />
         </Button>
       </div>
 
@@ -400,15 +621,14 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       {/* Main Content - Chalkboard */}
       <div className="flex-1 flex flex-col">
         {/* Chalkboard Display */}
-        <div className="flex-1 p-4 lg:p-6 overflow-hidden">
-          <Card className="h-full bg-gradient-to-br from-background/20 to-background border-slate-700 relative overflow-hidden">
+        <div className="flex-1 p-2 lg:p-4 overflow-hidden">
+          <Card className="h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border-slate-700 dark:border-slate-800 relative overflow-hidden">
             {/* Chalkboard texture overlay */}
-            <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+Cjwvc3ZnPg==')]"></div>
+            <div className="absolute inset-0 opacity-5 dark:opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+Cjwvc3ZnPg==')]"></div>
 
             <ScrollArea className="h-full relative z-10">
-              <div className="max-w-4xl mx-auto py-6 lg:py-8 px-4 lg:px-6">
-                <AnimatePresence mode="wait">
-                  {messages.length === 0 ? (
+              <div className="max-w-3xl lg:max-w-4xl mx-auto py-4 lg:py-6 px-3 lg:px-4">
+                {messages.length === 0 ? (
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -419,12 +639,12 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ type: "spring", duration: 0.5 }}
-                        className="flex h-16 w-16 lg:h-20 lg:w-20 items-center justify-center rounded-2xl bg-black/20 dark:bg-foreground/20 text-emerald-400 mb-6"
+                        className="flex h-16 w-16 lg:h-20 lg:w-20 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 mb-6"
                       >
                         <GraduationCap className="h-8 w-8 lg:h-10 lg:w-10" />
                       </motion.div>
-                      <h3 className="text-xl lg:text-2xl font-bold text-foreground dark:text-white mb-3">Welcome to Lecturer Mode</h3>
-                      <p className="dark:text-slate-300 text-slate-700 max-w-md mb-6 text-sm lg:text-base">
+                      <h3 className="text-xl lg:text-2xl font-bold text-white mb-3">Welcome to Lecturer Mode</h3>
+                      <p className="text-slate-300 max-w-md mb-6 text-sm lg:text-base">
                         Select a note and I'll explain it to you like a real lecturer. Ask questions, get examples, and learn interactively!
                       </p>
                       <div className="flex flex-wrap justify-center gap-2 lg:gap-3">
@@ -433,7 +653,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.2 }}
                         >
-                          <Badge variant="outline" className="border-slate-600 dark:text-slate-300 text- flex items-center gap-1">
+                          <Badge variant="outline" className="border-slate-600 text-slate-300 flex items-center gap-1">
                             <Mic className="h-3 w-3" />
                             <span className="text-xs">Voice Input</span>
                           </Badge>
@@ -443,7 +663,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.3 }}
                         >
-                          <Badge variant="outline" className="border-slate-600 dark:text-slate-300 text-black flex items-center gap-1">
+                          <Badge variant="outline" className="border-slate-600 text-slate-300 flex items-center gap-1">
                             <Volume2 className="h-3 w-3" />
                             <span className="text-xs">Audio Output</span>
                           </Badge>
@@ -453,7 +673,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.4 }}
                         >
-                          <Badge variant="outline" className="border-slate-600 dark:text-slate-300 text-black flex items-center gap-1">
+                          <Badge variant="outline" className="border-slate-600 text-slate-300 flex items-center gap-1">
                             <MessageCircle className="h-3 w-3" />
                             <span className="text-xs">Visual Explanations</span>
                           </Badge>
@@ -475,13 +695,106 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                           className={cn(
                             "rounded-2xl p-4 lg:p-6",
                             message.role === "user"
-                              ? "dark:bg-slate-700/50 bg-slate-100 border border-slate-600 ml-auto max-w-[90%] lg:max-w-[80%]"
+                              ? "bg-slate-200/50 dark:bg-slate-700/50 border border-slate-400 dark:border-slate-600 ml-auto max-w-[90%] lg:max-w-[80%]"
                               : "bg-transparent",
                           )}
                         >
                           {message.role === "assistant" ? (
-                            <div className="prose prose-invert prose-sm lg:prose-lg max-w-none">
-                              <ReactMarkdown>{message.content}</ReactMarkdown>
+                            <div className="prose prose-sm lg:prose-base max-w-none prose-invert">
+                              {message.content === "LOADING" ? (
+                                <div className="flex items-center gap-2 text-slate-400">
+                                  <div className="flex gap-1">
+                                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                  </div>
+                                  <span className="text-sm">AI is thinking...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <style jsx global>{`
+                                    .prose {
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .prose h1,
+                                    .prose h2,
+                                    .prose h3,
+                                    .prose h4,
+                                    .prose h5,
+                                    .prose h6 {
+                                      color: rgb(255, 255, 255);
+                                    }
+                                    .prose strong {
+                                      color: rgb(255, 255, 255);
+                                    }
+                                    .prose a {
+                                      color: rgb(52, 211, 153);
+                                    }
+                                    .prose a:hover {
+                                      color: rgb(16, 185, 129);
+                                    }
+                                    .prose code {
+                                      color: rgb(52, 211, 153);
+                                      background-color: rgb(30, 41, 59);
+                                      padding: 0.2rem 0.4rem;
+                                      border-radius: 0.25rem;
+                                    }
+                                    .prose pre {
+                                      background-color: rgb(15, 23, 42);
+                                      border: 1px solid rgb(51, 65, 85);
+                                    }
+                                    .prose pre code {
+                                      background-color: transparent;
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .prose blockquote {
+                                      border-left-color: rgb(52, 211, 153);
+                                      color: rgb(148, 163, 184);
+                                    }
+                                    .prose ul,
+                                    .prose ol {
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .prose li {
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .prose table {
+                                      display: block;
+                                      overflow-x: auto;
+                                      white-space: nowrap;
+                                      margin: 1rem 0;
+                                      border-collapse: collapse;
+                                      width: 100%;
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .prose th,
+                                    .prose td {
+                                      border: 1px solid rgb(71, 85, 105);
+                                      padding: 0.5rem 0.75rem;
+                                      text-align: left;
+                                      min-width: 120px;
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .prose th {
+                                      background-color: rgb(30, 41, 59);
+                                      font-weight: 600;
+                                      color: rgb(255, 255, 255);
+                                    }
+                                    .prose tr:nth-child(even) {
+                                      background-color: rgb(30, 41, 59);
+                                    }
+                                    .prose hr {
+                                      border-color: rgb(71, 85, 105);
+                                    }
+                                    .prose pre {
+                                      overflow-x: auto;
+                                      white-space: pre-wrap;
+                                      word-wrap: break-word;
+                                    }
+                                  `}</style>
+                                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                                </>
+                              )}
                             </div>
                           ) : (
                             <div className="text-slate-200">
@@ -511,7 +824,6 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                       <div ref={scrollRef} />
                     </motion.div>
                   )}
-                </AnimatePresence>
               </div>
             </ScrollArea>
 
@@ -613,6 +925,9 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
               <Settings className="h-5 w-5" />
               Lecturer Settings
             </DialogTitle>
+            <DialogDescription>
+              Configure your lecture preferences and select notes to study
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Note Selection */}
@@ -717,6 +1032,79 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
               <Lightbulb className="h-4 w-4" />
               <p>Use voice input for hands-free learning</p>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lecture History Modal */}
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Lecture History
+            </DialogTitle>
+            <DialogDescription>
+              View and load your past lecture sessions
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4 overflow-y-auto max-h-[60vh]">
+            {lectures.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>No lecture history yet</p>
+                <p className="text-sm mt-1">Start a lecture to see it here</p>
+              </div>
+            ) : (
+              lectures.map((lecture) => (
+                <motion.div
+                  key={lecture.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="p-4 border border-border rounded-xl hover:bg-accent cursor-pointer transition-colors"
+                  onClick={() => loadLecture(lecture.id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium truncate">{lecture.title}</h4>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
+                        {lecture.note_id && (
+                          <>
+                            <span>•</span>
+                            <span className="capitalize">{lecture.explanation_level}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        loadLecture(lecture.id)
+                      }}
+                    >
+                      Load
+                    </Button>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2 pt-4 border-t">
+            <Button
+              onClick={() => {
+                createNewLecture()
+                setShowHistory(false)
+              }}
+              className="flex-1"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Start New Lecture
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

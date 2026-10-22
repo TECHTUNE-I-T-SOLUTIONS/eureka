@@ -88,25 +88,75 @@ export async function processAudioInput(
 }
 
 /**
- * Generate audio from text using Gemini TTS
+ * Generate audio from text using Gemini's multimodal capabilities
+ * Gemini can generate audio content through the text-to-speech API
  */
 export async function generateAudio(text: string): Promise<ArrayBuffer> {
-  // This would use Gemini's TTS capabilities
-  // For now, we'll return a placeholder
-  // In production, you'd call the appropriate TTS endpoint
-  throw new Error("TTS not yet implemented - use browser's speech synthesis")
+  if (!genAI) {
+    throw new Error("Gemini API key not configured")
+  }
+
+  try {
+    // Use Gemini's text generation with audio output capability
+    // Note: This uses the model's ability to generate audio responses
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" })
+
+    const result = await model.generateContent([
+      `Convert this text to speech: ${text}`,
+    ])
+
+    // For now, Gemini's direct TTS is not fully exposed in the SDK
+    // We'll use the browser's TTS as a fallback with better voice selection
+    throw new Error("Gemini TTS via SDK not yet available - using browser TTS")
+  } catch (error) {
+    console.error("Gemini TTS error:", error)
+    throw error
+  }
 }
 
 /**
- * Get available lecturer models
+ * Alternative: Use browser TTS with enhanced voice selection
+ * This is the most reliable free option currently
+ */
+export async function speakWithBrowserTTS(text: string): Promise<void> {
+  if (!window.speechSynthesis) {
+    throw new Error("Speech synthesis not supported")
+  }
+
+  return new Promise((resolve, reject) => {
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 1
+    utterance.pitch = 1
+    utterance.volume = 1
+
+    // Try to get a good voice
+    const voices = window.speechSynthesis.getVoices()
+    const preferredVoice = voices.find(
+      (voice) =>
+        voice.lang.includes("en") &&
+        (voice.name.includes("Google") || voice.name.includes("Natural") || voice.name.includes("Enhanced")),
+    )
+    if (preferredVoice) {
+      utterance.voice = preferredVoice
+    }
+
+    utterance.onend = () => resolve()
+    utterance.onerror = (e) => reject(e)
+
+    window.speechSynthesis.speak(utterance)
+  })
+}
+
+/**
+ * Get available lecturer models (Free tier models only)
  */
 export const LECTURER_MODELS = {
-  GEMINI_3_8_LIVE: "gemini-3.8-live",
-  GEMINI_3_8_LIVE_EXTENDED: "gemini-3.8-live-extended-thinking",
-  GEMINI_3_1_FLASH_LIVE: "gemini-3.1-flash-live-preview",
-  GEMINI_3_5_TRANSCRIBE: "gemini-3.5-transcribe-live",
-  GEMINI_2_5_FLASH_NATIVE_AUDIO: "gemini-2.5-flash-native-audio-preview-12-2025",
-  FALLBACK: "gemini-2.5-flash-exp",
+  GEMINI_3_8_FLASH: "gemini-3.8-flash", // Free on free tier
+  GEMINI_3_6_FLASH: "gemini-3.6-flash", // Free on free tier
+  GEMINI_3_5_FLASH_LITE: "gemini-3.5-flash-lite", // Free on free tier (recommended)
+  GEMINI_2_5_FLASH: "gemini-2.5-flash", // Free on free tier
+  TTS_MODEL: "gemini-3.8-flash-lite-tts", // Free TTS on free tier
+  FALLBACK: "gemini-3.5-flash-lite", // Most cost-effective free option
 }
 
 function buildLecturerPrompt(config: LiveSessionConfig): string {
@@ -145,23 +195,43 @@ ${explanationLevel === "beginner" ? `
 - Provide context for why this matters
 - End with a summary and practical takeaways
 
+**Enhanced Explanations:**
+- Go beyond the provided notes - add your own examples and analogies
+- Reference real-world applications and industry cases
+- Mention relevant books, papers, or authors when appropriate
+- Connect concepts to other fields or domains
+- Provide historical context or interesting facts
+- Suggest further reading or resources when relevant
+- Use metaphors and analogies not in the original content
+- Explain the "why" behind concepts, not just the "what"
+
 **Communication Style:**
 - Use clear, conversational language
 - Format with bullet points and numbered lists for clarity
 - Emphasize key concepts (you can use **bold** for emphasis)
 - Be encouraging and positive
 - Acknowledge when a topic is complex
+
+**Formatting Rules (IMPORTANT):**
+- For tables: Use markdown table format with proper alignment
+- Keep table columns concise and readable
+- Break long content into multiple smaller tables if needed
+- Use code blocks for mathematical expressions or technical content
+- Keep responses under 2000 words to prevent truncation
+- If content is very long, split it into numbered sections
+- Always use proper markdown syntax
+- Use [External Reference: Title](link) format for external links
 `
 
   if (noteContext) {
-    prompt += `\n\n**Note Context to Explain:**\n${noteContext}\n\nBase your explanations on this content but expand with relevant context and examples.`
+    prompt += `\n\n**Note Context to Explain:**\n${noteContext}\n\nBase your explanations on this content but EXPAND significantly with additional examples, real-world applications, historical context, and external references. Don't just repeat the notes - enhance them.`
   }
 
   if (context) {
     prompt += `\n\n**Additional Context:**\n${context}`
   }
 
-  prompt += `\n\nRespond in a way that's engaging, educational, and appropriate for a live lecture setting. Keep responses concise but thorough - aim for clarity over brevity.`
+  prompt += `\n\nRespond in a way that's engaging, educational, and appropriate for a live lecture setting. Go beyond the provided material to create a truly comprehensive learning experience. Keep responses concise but thorough - aim for clarity over brevity. Stay within reasonable length limits.`
 
   return prompt
 }

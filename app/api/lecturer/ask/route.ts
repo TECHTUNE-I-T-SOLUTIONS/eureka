@@ -35,13 +35,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // Try to use Gemini Live API first
+    // Try Gemini first (FREE tier)
     try {
       const response = await generateLecturerResponse(question, {
         context: context || "",
         noteContext: context || "",
         explanationLevel,
-        model: LECTURER_MODELS.FALLBACK, // Use fallback model for now
+        model: LECTURER_MODELS.GEMINI_3_5_FLASH_LITE, // Use free tier model (gemini-3.5-flash-lite)
       })
 
       return NextResponse.json({
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
         ],
         modelList: PAID_MODELS,
         temperature: 0.8,
-        max_tokens: 3000,
+        max_tokens: 2000,
       })
 
       // Generate follow-up questions
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         ],
         modelList: PAID_MODELS,
         temperature: 0.7,
-        max_tokens: 200,
+        max_tokens: 150,
       })
 
       const suggestedQuestions = followUpResult.content
@@ -148,13 +148,22 @@ ${explanationLevel === "beginner" ? `
 - Emphasize key concepts (use **bold** for emphasis)
 - Be encouraging and positive
 - Acknowledge when a topic is complex
+
+**Formatting Rules (IMPORTANT):**
+- For tables: Use markdown table format with proper alignment
+- Keep table columns concise and readable
+- Break long content into multiple smaller tables if needed
+- Use code blocks for mathematical expressions or technical content
+- Keep responses under 2000 words to prevent truncation
+- If content is very long, split it into numbered sections
+- Always use proper markdown syntax
 `
 
   if (context) {
     prompt += `\n\n**Content to Explain:**\n${context}\n\nBase your explanations on this content but expand with relevant context and examples.`
   }
 
-  prompt += `\n\nRespond in a way that's engaging, educational, and appropriate for a live lecture setting. Keep responses concise but thorough - aim for clarity over brevity.`
+  prompt += `\n\nRespond in a way that's engaging, educational, and appropriate for a live lecture setting. Keep responses concise but thorough - aim for clarity over brevity. Stay within reasonable length limits.`
 
   return prompt
 }

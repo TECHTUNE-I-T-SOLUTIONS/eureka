@@ -6,17 +6,18 @@ const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || "https://openrout
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const APP_TITLE = process.env.NEXT_PUBLIC_APP_TITLE || "Eureka";
 
-// List of paid models to try (add/remove as needed)
+// List of paid models to try (updated 2025 - use current available models)
 export const PAID_MODELS = [
+  "openai/gpt-4o-mini", // OpenAI GPT-4o Mini (cheaper, good performance)
   "openai/gpt-4o", // OpenAI GPT-4o
-  "openai/gpt-4-turbo", // OpenAI GPT-4 Turbo
-  "anthropic/claude-3-opus", // Claude 3 Opus
-  "anthropic/claude-3-sonnet", // Claude 3 Sonnet
-  "anthropic/claude-3-haiku", // Claude 3 Haiku
-  "google/gemini-pro", // Gemini Pro
-  "meta-llama/llama-3-70b-instruct", // Llama 3 70B
-  "mistralai/mistral-large", // Mistral Large
-  "perplexity/pplx-70b-online", // Perplexity 70B Online
+  "anthropic/claude-3.5-sonnet", // Claude 3.5 Sonnet
+  "anthropic/claude-3.5-haiku", // Claude 3.5 Haiku
+  "anthropic/claude-haiku-4.5", // Claude Haiku 4.5
+  "google/gemini-2.0-flash-exp", // Gemini 2.0 Flash Experimental
+  "google/gemini-1.5-flash", // Gemini 1.5 Flash
+  "meta-llama/llama-3.3-70b-instruct", // Llama 3.3 70B
+  "mistralai/mistral-large-2402", // Mistral Large 2402
+  "qwen/qwen-2.5-72b-instruct", // Qwen 2.5 72B
   // Add more as desired
 ];
 

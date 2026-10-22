@@ -206,12 +206,12 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
         setExplanationLevel(lecture.explanation_level as any)
 
         if (messages && messages.length > 0) {
-          const mappedMessages = messages.map(m => ({ role: m.sender as "user" | "assistant", content: m.content }))
+          const mappedMessages = messages.map((m: any) => ({ role: m.sender as "user" | "assistant", content: m.content }))
           console.log("Mapped messages:", mappedMessages)
           setMessages(mappedMessages)
 
           // Set current explanation to the last assistant message
-          const lastAssistantMessage = [...mappedMessages].reverse().find(m => m.role === "assistant")
+          const lastAssistantMessage = [...mappedMessages].reverse().find((m: any) => m.role === "assistant")
           if (lastAssistantMessage) {
             setCurrentExplanation(lastAssistantMessage.content)
           }

@@ -1,7 +1,7 @@
 // OpenRouter API utility for Eureka
 // Only uses paid models, tries multiple in order
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "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";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const APP_TITLE = process.env.NEXT_PUBLIC_APP_TITLE || "Eureka";

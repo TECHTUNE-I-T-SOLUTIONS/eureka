@@ -149,6 +149,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
 
   const createNewLecture = async () => {
     try {
+      console.log("Creating new lecture...")
       const response = await fetch("/api/lectures", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -160,7 +161,8 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       })
 
       if (!response.ok) {
-        console.log("Lectures API not available - running without history")
+        const errorText = await response.text()
+        console.error("Lectures API not available:", response.status, errorText)
         setCurrentLectureId(null)
         setMessages([])
         setCurrentExplanation("")
@@ -170,6 +172,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       }
 
       const lecture = await response.json()
+      console.log("Lecture created:", lecture)
       setCurrentLectureId(lecture.id)
       setMessages([])
       setCurrentExplanation("")
@@ -177,7 +180,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       fetchLectures()
       toast.success("New lecture started")
     } catch (error) {
-      console.log("Lectures feature not available - running without history")
+      console.error("Error creating lecture:", error)
       setCurrentLectureId(null)
       setMessages([])
       setCurrentExplanation("")
@@ -236,12 +239,14 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
 
   const saveMessage = async (role: "user" | "assistant", content: string) => {
     if (!currentLectureId) {
+      console.log("No lecture ID - cannot save message")
       // Create lecture if it doesn't exist
       await createNewLecture()
       return
     }
 
     try {
+      console.log("Saving message:", { role, lectureId: currentLectureId, contentLength: content.length })
       const response = await fetch(`/api/lectures/${currentLectureId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -252,10 +257,13 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       })
 
       if (!response.ok) {
-        console.log("Failed to save message - lectures feature might not be available")
+        const errorText = await response.text()
+        console.error("Failed to save message:", response.status, errorText)
+      } else {
+        console.log("Message saved successfully")
       }
     } catch (error) {
-      console.log("Lectures feature not available")
+      console.error("Error saving message:", error)
     }
   }
 
@@ -315,23 +323,30 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
 
   const speakText = async (text: string) => {
     if (isSpeaking) {
+      // Stop the audio if it's playing
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
       setIsSpeaking(false)
       return
     }
 
-    // Only use Gemini TTS - no browser fallback
+    // Only use ElevenLabs TTS - no browser fallback
     try {
       setIsSpeaking(true)
+      // Strip markdown to avoid gibberish when reading hashtags, etc.
+      const cleanText = stripMarkdownForTTS(text)
       const response = await fetch("/api/lecturer/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: cleanText }),
       })
 
       if (!response.ok) {
         const error = await response.json()
-        console.error("Gemini TTS error:", error)
-        toast.error("Gemini TTS failed", {
+        console.error("ElevenLabs TTS error:", error)
+        toast.error("TTS failed", {
           description: error.error || "Unable to generate audio",
         })
         setIsSpeaking(false)
@@ -339,16 +354,16 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       }
 
       const data = await response.json()
-      
+
       if (data.error) {
-        toast.error("Gemini TTS not available", {
+        toast.error("TTS not available", {
           description: data.details || "Please check your API key configuration",
         })
         setIsSpeaking(false)
         return
       }
 
-      // If we get audio data from Gemini, play it
+      // If we get audio data from ElevenLabs, play it
       if (data.audio) {
         if (audioRef.current) {
           audioRef.current.src = data.audio
@@ -357,13 +372,19 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
             setIsSpeaking(false)
             toast.error("Failed to play audio")
           }
+          audioRef.current.onpause = () => {
+            // Only set isSpeaking to false if not ended naturally
+            if (audioRef.current && audioRef.current.currentTime > 0 && audioRef.current.ended === false) {
+              setIsSpeaking(false)
+            }
+          }
           await audioRef.current.play()
         }
       }
     } catch (error) {
       console.error("TTS error:", error)
       toast.error("TTS error", {
-        description: "Gemini TTS is not working",
+        description: "Unable to generate audio",
       })
       setIsSpeaking(false)
     }
@@ -418,13 +439,42 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
   const normalizeMarkdown = (text: string): string => {
     let normalized = text
 
-    // Fix collapsed table rows - split rows that are on the same line
-    // Pattern: | a | b | | :--- | :--- | -> split into two rows
+    // Fix collapsed table rows - extract and reconstruct tables
+    // Pattern: | Col1 | Col2 | Col3 | | --- | --- | --- | | Data1 | Data2 | Data3 |
+    const tablePattern = /(\|[^\n]+\|)(\s*\|[^\n]+\|)(\s*\|[^\n]+\|)+/g
+    normalized = normalized.replace(tablePattern, (match) => {
+      // Split by | and reconstruct
+      const cells = match.split('|').filter(c => c.trim())
+      // Determine number of columns (default to 3 for most tables)
+      const cols = 3
+      let result = ""
+      for (let i = 0; i < cells.length; i += cols) {
+        const rowCells = cells.slice(i, i + cols)
+        if (rowCells.length > 0) {
+          result += `| ${rowCells.join(' | ')} |\n`
+        }
+      }
+      return result.trim()
+    })
+
+    // Fix collapsed table rows - split at | | boundaries (fallback)
+    normalized = normalized.replace(/\|\s*\|/g, "|\n|")
+
+    // Fix collapsed table separator rows attached to data rows
+    // Pattern: | data | | --- | --- | -> split into two rows
     normalized = normalized.replace(/\|\s*\|\s*:/g, "|\n|:")
 
     // Fix sections without heading markers
     // Pattern: "Section 1: Title" -> "## Section 1: Title"
     normalized = normalized.replace(/^(Section \d+:)/gm, "## $1")
+
+    // Fix Part headings - only add ### if not already there
+    // Pattern: "Part 1: Title" -> "### Part 1: Title" (if no # already)
+    normalized = normalized.replace(/^###?\s*(Part \d+:)/gm, "### $1")
+
+    // Fix numbered headings - only add ## if not already there
+    // Pattern: "1. Title" -> "## 1. Title" (if no # already)
+    normalized = normalized.replace(/^##?\s*(\d+)\.\s+(.+)$/gm, "## $1. $2")
 
     // Fix malformed table rows where content is collapsed
     // Pattern: | Col1 | Col2 | Col3 | -> ensure proper spacing
@@ -453,6 +503,26 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
     return normalized
   }
 
+  // Strip markdown syntax for TTS (to avoid gibberish when reading hashtags, etc.)
+  const stripMarkdownForTTS = (text: string): string => {
+    let stripped = text
+    // Remove heading markers
+    stripped = stripped.replace(/^#{1,6}\s+/gm, "")
+    // Remove bold markers
+    stripped = stripped.replace(/\*\*(.+?)\*\*/g, "$1")
+    // Remove italic markers
+    stripped = stripped.replace(/\*(.+?)\*/g, "$1")
+    // Remove code markers
+    stripped = stripped.replace(/`(.+?)`/g, "$1")
+    // Remove table formatting
+    stripped = stripped.replace(/\|/g, ", ")
+    // Remove links but keep text
+    stripped = stripped.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // Remove extra whitespace
+    stripped = stripped.replace(/\s+/g, " ")
+    return stripped.trim()
+  }
+
   const handleSubmit = async () => {
     const question = input.trim()
     if (!question && !noteContent) {
@@ -466,7 +536,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
     if (!currentLectureId) {
       await createNewLecture()
       // Wait a bit for state to update
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, 200))
     }
 
     // If still no lecture ID, continue without saving to history

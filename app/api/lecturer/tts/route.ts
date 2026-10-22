@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js"
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 
-if (!GEMINI_API_KEY) {
-  console.warn("GEMINI_API_KEY not set for TTS")
+if (!ELEVENLABS_API_KEY) {
+  console.warn("ELEVENLABS_API_KEY not set for TTS")
 }
 
 export async function POST(request: Request) {
@@ -14,21 +15,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Text is required" }, { status: 400 })
     }
 
-    if (!GEMINI_API_KEY) {
-      return NextResponse.json({ error: "Gemini API key not configured" }, { status: 500 })
+    if (!ELEVENLABS_API_KEY) {
+      return NextResponse.json({ error: "ElevenLabs API key not configured" }, { status: 500 })
     }
 
-    // Note: Gemini API does not currently have a dedicated TTS endpoint
-    // The models return text, not audio
-    // For TTS functionality, we would need to use a different service
-    // or wait for Gemini to add audio output capabilities
+    // Initialize ElevenLabs client
+    const client = new ElevenLabsClient({
+      apiKey: ELEVENLABS_API_KEY,
+    })
+
+    // Generate audio using ElevenLabs TTS
+    // Using the specific voice ID provided
+    const audio = await client.textToSpeech.convert("JBFqnCBsd6RMkjVDRZzb", {
+      text: text,
+      modelId: "eleven_multilingual_v2",
+      voiceSettings: {
+        stability: 0.5,
+        similarityBoost: 0.75,
+      },
+    })
+
+    // Convert the audio stream to a buffer
+    const chunks: Uint8Array[] = []
+    const reader = audio.getReader()
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+    }
+
+    const audioBuffer = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0))
+    let offset = 0
+    for (const chunk of chunks) {
+      audioBuffer.set(chunk, offset)
+      offset += chunk.length
+    }
+
+    // Return the audio as base64
+    const base64Audio = Buffer.from(audioBuffer).toString('base64')
+    const audioUrl = `data:audio/mpeg;base64,${base64Audio}`
 
     return NextResponse.json({
-      error: "Gemini TTS not available",
-      details: "The Gemini API currently does not provide text-to-speech capabilities. To add audio playback, consider using: 1) Browser's Web Speech API (built-in, free), 2) A dedicated TTS service like ElevenLabs or OpenAI's TTS API, or 3) Wait for Gemini to add audio output features.",
-    }, { status: 501 })
+      audio: audioUrl,
+    })
   } catch (error) {
-    console.error("TTS error:", error)
+    console.error("ElevenLabs TTS error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to generate audio" },
       { status: 500 },

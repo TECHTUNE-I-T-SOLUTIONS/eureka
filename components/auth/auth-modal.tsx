@@ -103,7 +103,7 @@ export function AuthModal({ open, onOpenChange, defaultMode = "login" }: AuthMod
       if (error) throw error
 
       // Show loading modal briefly before success
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise((resolve) => setTimeout(resolve, 3500))
       setShowLoadingModal(false)
 
       toast.success("Welcome back!", {

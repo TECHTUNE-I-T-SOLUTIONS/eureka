@@ -36,6 +36,7 @@ import {
   Bell,
   BookOpen,
   Plus,
+  GraduationCap,
 } from "lucide-react"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -75,6 +76,11 @@ const mainNavItems = [
     title: "Chat",
     url: "/dashboard/chat",
     icon: MessageSquare,
+  },
+  {
+    title: "Lecturer Mode",
+    url: "/dashboard/lecturer",
+    icon: GraduationCap,
   },
   {
     title: "Notifications",
@@ -160,6 +166,14 @@ export function AppSidebar({ user, notificationCount = 0 }: AppSidebarProps) {
                   <Link href="/dashboard/chat?new=true" className="text-primary">
                     <BookOpen className="h-4 w-4" />
                     <span>New Study Session</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Lecturer Mode">
+                  <Link href="/dashboard/lecturer" className="text-primary">
+                    <GraduationCap className="h-4 w-4" />
+                    <span>Lecturer Mode</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

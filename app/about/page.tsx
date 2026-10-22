@@ -162,7 +162,7 @@ export default function AboutPage() {
                 <div>
                   <h3 className="text-lg font-bold mb-2">Advanced AI Technology</h3>
                   <p className="text-muted-foreground">
-                    Powered by Google's Gemini 2.0 Flash, our AI provides accurate, contextual, and personalized responses.
+                    Our AI provides accurate, contextual, and personalized responses.
                   </p>
                 </div>
               </div>

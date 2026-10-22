@@ -321,8 +321,8 @@ For issues, questions, or suggestions, please open an issue on GitHub or contact
 
 <div align="center">
 
-**Built with ❤️ by [TechTune IT Solutions](https://github.com/TECHTUNE-I-T-SOLUTIONS)**
+**Built by [TechTune IT Solutions](https://github.com/TECHTUNE-I-T-SOLUTIONS)**
 
-*Making education more accessible, one note at a time* 📚✨
+*Making education more accessible, one note at a time*
 
 </div>

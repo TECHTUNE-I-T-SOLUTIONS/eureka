@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 
@@ -19,23 +18,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Gemini API key not configured" }, { status: 500 })
     }
 
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-    const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash-lite-tts" })
+    // Note: Gemini API does not currently have a dedicated TTS endpoint
+    // The models return text, not audio
+    // For TTS functionality, we would need to use a different service
+    // or wait for Gemini to add audio output capabilities
 
-    // Note: Gemini TTS requires a different API call
-    // For now, we'll return an error indicating to use browser TTS
-    // The TTS endpoint might require different implementation
-    return NextResponse.json(
-      {
-        error: "Gemini TTS requires a different implementation. Using browser TTS instead.",
-        useBrowserTTS: true,
-      },
-      { status: 200 },
-    )
+    return NextResponse.json({
+      error: "Gemini TTS not available",
+      details: "The Gemini API currently does not provide text-to-speech capabilities. To add audio playback, consider using: 1) Browser's Web Speech API (built-in, free), 2) A dedicated TTS service like ElevenLabs or OpenAI's TTS API, or 3) Wait for Gemini to add audio output features.",
+    }, { status: 501 })
   } catch (error) {
     console.error("TTS error:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate audio", useBrowserTTS: true },
+      { error: error instanceof Error ? error.message : "Failed to generate audio" },
       { status: 500 },
     )
   }

@@ -30,7 +30,8 @@ export async function POST(request: Request) {
         .limit(20)
 
       if (chunks && chunks.length > 0) {
-        const noteTitle = (chunks[0].notes as { title: string } | null)?.title || "Note"
+        const noteData = chunks[0].notes as { title: string } | null
+        const noteTitle = noteData?.title || "Note"
         context = `Note: ${noteTitle}\n\n${chunks.map((c) => c.chunk_text).join("\n\n")}`
       }
     }
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
         context: context || "",
         noteContext: context || "",
         explanationLevel,
-        model: LECTURER_MODELS.GEMINI_3_5_FLASH_LITE, // Use free tier model (gemini-3.5-flash-lite)
+        model: LECTURER_MODELS.GEMINI_3_5_FLASH_LITE,
       })
 
       return NextResponse.json({
@@ -149,14 +150,28 @@ ${explanationLevel === "beginner" ? `
 - Be encouraging and positive
 - Acknowledge when a topic is complex
 
-**Formatting Rules (IMPORTANT):**
-- For tables: Use markdown table format with proper alignment
-- Keep table columns concise and readable
-- Break long content into multiple smaller tables if needed
-- Use code blocks for mathematical expressions or technical content
+**Formatting Rules (CRITICAL - Follow Exactly):**
+- Use proper Markdown syntax throughout
+- For headings: Use ## for main sections, ### for subsections (ALWAYS include the #)
+- For lists: Use proper bullet points with hyphens or numbers on separate lines
+- For emphasis: Use **bold** for key terms
+- For code: Use backticks \`like this\` for inline code
+- For code blocks: Use triple backticks with language identifier
+- For mathematical expressions: Use LaTeX with \(...\) for inline math and \[...\] for display math
+- For tables: Use proper markdown table format with | separators, each row on its own line
+  Example:
+  | Header 1 | Header 2 |
+  | --- | --- |
+  | Cell 1 | Cell 2 |
+- Keep table columns concise - break complex tables into smaller ones
+- Don't use backslashes \\ for line breaks - use blank lines instead
+- Use proper spacing: add blank lines between paragraphs
 - Keep responses under 2000 words to prevent truncation
-- If content is very long, split it into numbered sections
-- Always use proper markdown syntax
+- If content is very long, split it into numbered sections (Part 1, Part 2, etc.)
+- For matrices, use LaTeX within \[...\] blocks
+- Format external references as: [Title](url)
+- NEVER collapse table rows onto a single line
+- ALWAYS put each table row on a separate line
 `
 
   if (context) {

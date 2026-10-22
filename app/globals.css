@@ -1,6 +1,26 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Basic KaTeX styles without font loading */
+.katex {
+  font-size: 1.1em;
+  color: rgb(203, 213, 225);
+}
+
+.katex-display {
+  margin: 1.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-display > .katex {
+  text-align: left;
+}
+
+.katex-html {
+  color: rgb(203, 213, 225);
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -440,4 +460,24 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* KaTeX styling for math equations - basic styles without font loading */
+.katex {
+  font-size: 1.1em;
+  color: rgb(203, 213, 225);
+}
+
+.katex-display {
+  margin: 1.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-display > .katex {
+  text-align: left;
+}
+
+.katex-html {
+  color: rgb(203, 213, 225);
 }

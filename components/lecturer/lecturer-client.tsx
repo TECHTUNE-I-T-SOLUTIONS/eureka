@@ -35,6 +35,8 @@ import {
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import ReactMarkdown from "react-markdown"
+import remarkMath from "remark-math"
+import rehypeKatex from "rehype-katex"
 
 interface Note {
   id: string
@@ -125,7 +127,6 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
 
   useEffect(() => {
     scrollToBottom()
-    console.log("Messages updated:", messages)
   }, [messages])
 
   useEffect(() => {
@@ -169,7 +170,6 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       }
 
       const lecture = await response.json()
-      console.log("Created lecture:", lecture)
       setCurrentLectureId(lecture.id)
       setMessages([])
       setCurrentExplanation("")
@@ -315,72 +315,142 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
 
   const speakText = async (text: string) => {
     if (isSpeaking) {
-      window.speechSynthesis.cancel()
       setIsSpeaking(false)
       return
     }
 
+    // Only use Gemini TTS - no browser fallback
     try {
       setIsSpeaking(true)
-
-      // Try Gemini TTS API first
       const response = await fetch("/api/lecturer/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        if (data.useBrowserTTS) {
-          // API indicates to use browser TTS
-          speakWithBrowser(text)
-        } else {
-          // Use the audio from API (if implemented)
-          speakWithBrowser(text)
+      if (!response.ok) {
+        const error = await response.json()
+        console.error("Gemini TTS error:", error)
+        toast.error("Gemini TTS failed", {
+          description: error.error || "Unable to generate audio",
+        })
+        setIsSpeaking(false)
+        return
+      }
+
+      const data = await response.json()
+      
+      if (data.error) {
+        toast.error("Gemini TTS not available", {
+          description: data.details || "Please check your API key configuration",
+        })
+        setIsSpeaking(false)
+        return
+      }
+
+      // If we get audio data from Gemini, play it
+      if (data.audio) {
+        if (audioRef.current) {
+          audioRef.current.src = data.audio
+          audioRef.current.onended = () => setIsSpeaking(false)
+          audioRef.current.onerror = () => {
+            setIsSpeaking(false)
+            toast.error("Failed to play audio")
+          }
+          await audioRef.current.play()
         }
-      } else {
-        // Fallback to browser TTS
-        speakWithBrowser(text)
       }
     } catch (error) {
       console.error("TTS error:", error)
-      // Fallback to browser TTS
-      speakWithBrowser(text)
-    }
-  }
-
-  const speakWithBrowser = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1
-    utterance.pitch = 1
-    utterance.volume = 1
-
-    // Get best available voice
-    const voices = window.speechSynthesis.getVoices()
-    const preferredVoice = voices.find(
-      (voice) =>
-        voice.lang.includes("en") &&
-        (voice.name.includes("Google") || voice.name.includes("Natural") || voice.name.includes("Enhanced")),
-    )
-    if (preferredVoice) {
-      utterance.voice = preferredVoice
-    }
-
-    utterance.onend = () => {
+      toast.error("TTS error", {
+        description: "Gemini TTS is not working",
+      })
       setIsSpeaking(false)
     }
-
-    utterance.onerror = () => {
-      setIsSpeaking(false)
-    }
-
-    window.speechSynthesis.speak(utterance)
   }
 
   const stopSpeaking = () => {
-    window.speechSynthesis.cancel()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
     setIsSpeaking(false)
+  }
+
+  // Robust parser for suggested questions
+  const parseSuggestedQuestions = (questions: string[]): string[] => {
+    if (!questions || questions.length === 0) return []
+
+    const parsed: string[] = []
+
+    for (const q of questions) {
+      // Remove numbering (1., 2., 3., etc.)
+      let cleaned = q.replace(/^\d+[\.\)]\s*/, "")
+
+      // Remove bullets and dashes
+      cleaned = cleaned.replace(/^[-•*]\s*/, "")
+
+      // Remove quotes
+      cleaned = cleaned.replace(/^["']|["']$/g, "")
+
+      // Remove extra whitespace
+      cleaned = cleaned.trim()
+
+      // Split if multiple questions are on one line (separated by ? or .)
+      const parts = cleaned.split(/[?\.]/).filter((p) => p.trim().length > 10)
+
+      for (const part of parts) {
+        const question = part.trim()
+        if (question.length > 10 && question.length < 200 && parsed.length < 3) {
+          // Add question mark if missing
+          const finalQuestion = question.endsWith("?") ? question : `${question}?`
+          parsed.push(finalQuestion)
+        }
+      }
+
+      if (parsed.length >= 3) break
+    }
+
+    return parsed.slice(0, 3)
+  }
+
+  // Normalize malformed Markdown from AI
+  const normalizeMarkdown = (text: string): string => {
+    let normalized = text
+
+    // Fix collapsed table rows - split rows that are on the same line
+    // Pattern: | a | b | | :--- | :--- | -> split into two rows
+    normalized = normalized.replace(/\|\s*\|\s*:/g, "|\n|:")
+
+    // Fix sections without heading markers
+    // Pattern: "Section 1: Title" -> "## Section 1: Title"
+    normalized = normalized.replace(/^(Section \d+:)/gm, "## $1")
+
+    // Fix malformed table rows where content is collapsed
+    // Pattern: | Col1 | Col2 | Col3 | -> ensure proper spacing
+    normalized = normalized.replace(/\|(?!\s)/g, "| ")
+
+    // Convert $$...$$ to \[...\] for KaTeX
+    normalized = normalized.replace(/\$\$([^$]+)\$\$/g, "\\[$1\\]")
+
+    // Convert $...$ to \(...\) for inline math
+    normalized = normalized.replace(/\$([^$]+)\$/g, "\\($1\\)")
+
+    // Remove backslash line breaks
+    normalized = normalized.replace(/\\\n/g, "\n")
+
+    // Ensure blank lines between paragraphs
+    normalized = normalized.replace(/([^\n])\n([A-Z])/g, "$1\n\n$2")
+
+    // Fix ASCII diagrams - wrap in code blocks
+    normalized = normalized.replace(/([+>-]{2,}.*\n?)+/g, (match) => {
+      if (match.includes("+---") || match.includes("--->") || match.includes("->")) {
+        return `\`\`\`\n${match}\n\`\`\``
+      }
+      return match
+    })
+
+    return normalized
   }
 
   const handleSubmit = async () => {
@@ -440,7 +510,10 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       setMessages((prev) => prev.filter((m) => m.id !== loadingId))
       setMessages((prev) => [...prev, { role: "assistant", content: data.answer }])
       setCurrentExplanation(data.answer)
-      setSuggestedQuestions(data.suggestedQuestions || [])
+
+      // Parse suggested questions more robustly
+      const parsedQuestions = parseSuggestedQuestions(data.suggestedQuestions || [])
+      setSuggestedQuestions(parsedQuestions)
       if (currentLectureId) {
         await saveMessage("assistant", data.answer)
       }
@@ -475,7 +548,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
   }
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
+    <div className="flex h-screen flex-col lg:flex-row overflow-hidden">
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="flex items-center gap-2">
@@ -506,7 +579,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       </div>
 
       {/* Sidebar - Controls (Desktop) */}
-      <div className="hidden lg:flex w-80 border-r border-border bg-background/50 backdrop-blur-xl p-4 flex-col gap-4">
+      <div className="hidden lg:flex w-80 flex-shrink-0 border-r border-border bg-background/50 backdrop-blur-xl p-4 flex-col gap-4 overflow-y-auto">
         <div className="flex items-center gap-2 mb-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <GraduationCap className="h-5 w-5" />
@@ -610,6 +683,49 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
           </Button>
         </div>
 
+        <Separator />
+
+        {/* Lecture History (Desktop) */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Lecture History</label>
+            <Button
+              onClick={() => fetchLectures()}
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+            >
+              <Loader2 className="h-3 w-3 mr-1" />
+              Refresh
+            </Button>
+          </div>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {lectures.length === 0 ? (
+              <div className="text-xs text-muted-foreground p-2">No lecture history</div>
+            ) : (
+              lectures.map((lecture) => (
+                <motion.div
+                  key={lecture.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => loadLecture(lecture.id)}
+                >
+                  <div className="flex items-start gap-2">
+                    <Clock className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{lecture.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(lecture.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+        </div>
+
         <div className="mt-auto">
           <div className="text-xs text-muted-foreground flex items-center gap-2">
             <Lightbulb className="h-4 w-4" />
@@ -619,15 +735,15 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
       </div>
 
       {/* Main Content - Chalkboard */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Chalkboard Display */}
-        <div className="flex-1 p-2 lg:p-4 overflow-hidden">
-          <Card className="h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border-slate-700 dark:border-slate-800 relative overflow-hidden">
+        <div className="flex-1 p-2 lg:p-4 overflow-hidden min-h-0">
+          <Card className="h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border-slate-700 dark:border-slate-800 relative overflow-hidden flex flex-col">
             {/* Chalkboard texture overlay */}
             <div className="absolute inset-0 opacity-5 dark:opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+Cjwvc3ZnPg==')]"></div>
 
-            <ScrollArea className="h-full relative z-10">
-              <div className="max-w-3xl lg:max-w-4xl mx-auto py-4 lg:py-6 px-3 lg:px-4">
+            <ScrollArea className="flex-1 relative z-10 h-full">
+              <div className="max-w-2xl lg:max-w-3xl mx-auto py-4 lg:py-6 px-3 lg:px-4 pb-20">
                 {messages.length === 0 ? (
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
@@ -715,6 +831,11 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                                   <style jsx global>{`
                                     .prose {
                                       color: rgb(203, 213, 225);
+                                      line-height: 1.75;
+                                    }
+                                    .prose p {
+                                      margin-bottom: 1.25rem;
+                                      line-height: 1.75;
                                     }
                                     .prose h1,
                                     .prose h2,
@@ -723,12 +844,21 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                                     .prose h5,
                                     .prose h6 {
                                       color: rgb(255, 255, 255);
+                                      margin-top: 2rem;
+                                      margin-bottom: 1rem;
+                                      line-height: 1.3;
                                     }
+                                    .prose h1 { font-size: 2.25rem; }
+                                    .prose h2 { font-size: 1.875rem; }
+                                    .prose h3 { font-size: 1.5rem; }
+                                    .prose h4 { font-size: 1.25rem; }
                                     .prose strong {
                                       color: rgb(255, 255, 255);
+                                      font-weight: 600;
                                     }
                                     .prose a {
                                       color: rgb(52, 211, 153);
+                                      text-decoration: underline;
                                     }
                                     .prose a:hover {
                                       color: rgb(16, 185, 129);
@@ -738,31 +868,44 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                                       background-color: rgb(30, 41, 59);
                                       padding: 0.2rem 0.4rem;
                                       border-radius: 0.25rem;
+                                      font-size: 0.875em;
                                     }
                                     .prose pre {
                                       background-color: rgb(15, 23, 42);
                                       border: 1px solid rgb(51, 65, 85);
+                                      padding: 1rem;
+                                      border-radius: 0.5rem;
+                                      overflow-x: auto;
+                                      margin: 1.5rem 0;
                                     }
                                     .prose pre code {
                                       background-color: transparent;
                                       color: rgb(203, 213, 225);
+                                      padding: 0;
                                     }
                                     .prose blockquote {
                                       border-left-color: rgb(52, 211, 153);
                                       color: rgb(148, 163, 184);
+                                      padding-left: 1rem;
+                                      margin: 1.5rem 0;
+                                      font-style: italic;
                                     }
                                     .prose ul,
                                     .prose ol {
                                       color: rgb(203, 213, 225);
+                                      margin: 1.25rem 0;
+                                      padding-left: 1.5rem;
                                     }
                                     .prose li {
                                       color: rgb(203, 213, 225);
+                                      margin-bottom: 0.5rem;
+                                      line-height: 1.75;
                                     }
                                     .prose table {
                                       display: block;
                                       overflow-x: auto;
                                       white-space: nowrap;
-                                      margin: 1rem 0;
+                                      margin: 1.5rem 0;
                                       border-collapse: collapse;
                                       width: 100%;
                                       color: rgb(203, 213, 225);
@@ -770,7 +913,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                                     .prose th,
                                     .prose td {
                                       border: 1px solid rgb(71, 85, 105);
-                                      padding: 0.5rem 0.75rem;
+                                      padding: 0.75rem 1rem;
                                       text-align: left;
                                       min-width: 120px;
                                       color: rgb(203, 213, 225);
@@ -785,14 +928,30 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                                     }
                                     .prose hr {
                                       border-color: rgb(71, 85, 105);
+                                      margin: 2rem 0;
                                     }
                                     .prose pre {
                                       overflow-x: auto;
                                       white-space: pre-wrap;
                                       word-wrap: break-word;
                                     }
+                                    /* KaTeX styling */
+                                    .katex {
+                                      font-size: 1.1em;
+                                      color: rgb(203, 213, 225);
+                                    }
+                                    .katex-display {
+                                      margin: 1.5em 0;
+                                      overflow-x: auto;
+                                      overflow-y: hidden;
+                                    }
                                   `}</style>
-                                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkMath]}
+                                    rehypePlugins={[rehypeKatex]}
+                                  >
+                                    {normalizeMarkdown(message.content)}
+                                  </ReactMarkdown>
                                 </>
                               )}
                             </div>
@@ -847,7 +1006,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-border bg-background/80 backdrop-blur-xl p-3 lg:p-4">
+        <div className="border-t border-border bg-background/80 backdrop-blur-xl p-3 lg:p-4 shrink-0">
           <div className="max-w-4xl mx-auto">
             <div className="flex gap-2 lg:gap-3">
               <Button
@@ -889,7 +1048,7 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-3 lg:mt-4 flex flex-wrap gap-2"
+                  className="mt-3 lg:mt-4 flex flex-wrap gap-2 w-full"
                 >
                   {suggestedQuestions.map((question, i) => (
                     <motion.div
@@ -897,11 +1056,12 @@ export function LecturerClient({ notes, initialExplanationLevel }: LecturerClien
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: i * 0.1 }}
+                      className="flex-1 min-w-[180px] max-w-[300px]"
                     >
                       <Button
                         variant="outline"
                         size="sm"
-                        className="rounded-xl text-xs lg:text-sm"
+                        className="rounded-xl text-xs lg:text-sm w-full h-auto py-2 px-3 text-left leading-relaxed break-words whitespace-normal text-wrap"
                         onClick={() => {
                           setInput(question)
                         }}

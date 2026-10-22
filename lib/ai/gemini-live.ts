@@ -39,7 +39,7 @@ export async function createLiveSession(config: LiveSessionConfig = {}) {
     throw new Error("Gemini API key not configured")
   }
 
-  const model = config.model || "gemini-2.5-flash-exp"
+  const model = config.model || LECTURER_MODELS.GEMINI_3_5_FLASH_LITE
   const generativeModel = genAI.getGenerativeModel({ model })
 
   // Build system prompt for lecturer mode
@@ -97,17 +97,9 @@ export async function generateAudio(text: string): Promise<ArrayBuffer> {
   }
 
   try {
-    // Use Gemini's text generation with audio output capability
-    // Note: This uses the model's ability to generate audio responses
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" })
-
-    const result = await model.generateContent([
-      `Convert this text to speech: ${text}`,
-    ])
-
-    // For now, Gemini's direct TTS is not fully exposed in the SDK
-    // We'll use the browser's TTS as a fallback with better voice selection
-    throw new Error("Gemini TTS via SDK not yet available - using browser TTS")
+    // Note: Gemini's direct TTS is not fully exposed in the SDK
+    // The TTS API route uses REST API which is the correct approach
+    throw new Error("Use the TTS API route instead - this function is deprecated")
   } catch (error) {
     console.error("Gemini TTS error:", error)
     throw error
@@ -151,11 +143,7 @@ export async function speakWithBrowserTTS(text: string): Promise<void> {
  * Get available lecturer models (Free tier models only)
  */
 export const LECTURER_MODELS = {
-  GEMINI_3_8_FLASH: "gemini-3.8-flash", // Free on free tier
-  GEMINI_3_6_FLASH: "gemini-3.6-flash", // Free on free tier
-  GEMINI_3_5_FLASH_LITE: "gemini-3.5-flash-lite", // Free on free tier (recommended)
-  GEMINI_2_5_FLASH: "gemini-2.5-flash", // Free on free tier
-  TTS_MODEL: "gemini-3.8-flash-lite-tts", // Free TTS on free tier
+  GEMINI_3_5_FLASH_LITE: "gemini-3.5-flash-lite", // Free on free tier (recommended by Google)
   FALLBACK: "gemini-3.5-flash-lite", // Most cost-effective free option
 }
 
@@ -212,15 +200,29 @@ ${explanationLevel === "beginner" ? `
 - Be encouraging and positive
 - Acknowledge when a topic is complex
 
-**Formatting Rules (IMPORTANT):**
-- For tables: Use markdown table format with proper alignment
-- Keep table columns concise and readable
-- Break long content into multiple smaller tables if needed
-- Use code blocks for mathematical expressions or technical content
+**Formatting Rules (CRITICAL - Follow Exactly):**
+- Use proper Markdown syntax throughout
+- For headings: Use ## for main sections, ### for subsections (ALWAYS include the #)
+- For lists: Use proper bullet points with hyphens or numbers on separate lines
+- For emphasis: Use **bold** for key terms
+- For code: Use backticks \`like this\` for inline code
+- For code blocks: Use triple backticks with language identifier
+- For mathematical expressions: Use LaTeX with \(...\) for inline math and \[...\] for display math
+- For tables: Use proper markdown table format with | separators, each row on its own line
+  Example:
+  | Header 1 | Header 2 |
+  | --- | --- |
+  | Cell 1 | Cell 2 |
+- Keep table columns concise - break complex tables into smaller ones
+- Don't use backslashes \\ for line breaks - use blank lines instead
+- Use proper spacing: add blank lines between paragraphs
 - Keep responses under 2000 words to prevent truncation
-- If content is very long, split it into numbered sections
-- Always use proper markdown syntax
-- Use [External Reference: Title](link) format for external links
+- If content is very long, split it into numbered sections (Part 1, Part 2, etc.)
+- For matrices, use LaTeX within \[...\] blocks
+- Format external references as: [Title](url)
+- NEVER collapse table rows onto a single line
+- ALWAYS put each table row on a separate line
+
 `
 
   if (noteContext) {
@@ -247,7 +249,13 @@ export async function generateLecturerResponse(
   const response = await processAudioInput(session, new ArrayBuffer(0), question)
 
   // Generate follow-up questions
-  const followUpPrompt = `Based on this Q&A, suggest 3 follow-up questions a student might ask to deepen their understanding:\n\nQuestion: ${question}\n\nAnswer: ${response.text}\n\nProvide just the questions, one per line, no numbering.`
+  const followUpPrompt = `Based on this Q&A, suggest 3 follow-up questions a student might ask to deepen their understanding. Each question should be concise and clear.
+
+Question: ${question}
+
+Answer: ${response.text}
+
+Provide just the questions, one per line, no numbering, no extra text.`
 
   const followUpResult = await session.model.generateContent([
     session.systemPrompt,
@@ -258,7 +266,7 @@ export async function generateLecturerResponse(
     .text()
     .split("\n")
     .map((q) => q.trim())
-    .filter((q) => q.length > 0)
+    .filter((q) => q.length > 0 && q.length < 200) // Filter out very long questions
     .slice(0, 3)
 
   return {

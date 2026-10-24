@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-import { generateText } from "ai"
+import { openrouterChat, PAID_MODELS } from "@/lib/ai/openrouter"
 import { getSystemPrompt, buildRAGPrompt } from "@/lib/prompts"
+import { checkAndUpdateNoteUsage } from "@/lib/usage-guard"
 
 export async function POST(request: Request) {
   try {
@@ -18,6 +19,21 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Usage Guard Check
+    const usageCheck = await checkAndUpdateNoteUsage(supabase, user.id, noteId)
+    if (!usageCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: usageCheck.error,
+          code: "LIMIT_EXCEEDED",
+          plan: usageCheck.plan,
+          limit: usageCheck.limit,
+          currentCount: usageCheck.currentCount,
+        },
+        { status: 403 }
+      )
     }
 
     // Get user settings for personalization
@@ -43,7 +59,7 @@ export async function POST(request: Request) {
         }))
       }
     } else {
-      // Get chunks from all user's notes (simplified - would use embeddings in production)
+      // Get chunks from all user's notes
       const { data: chunks } = await supabase
         .from("chunks")
         .select("*, notes!inner(title, user_id)")
@@ -51,12 +67,11 @@ export async function POST(request: Request) {
         .limit(20)
 
       if (chunks) {
-        // Simple keyword matching for now (would use vector similarity in production)
         const queryWords = query.toLowerCase().split(/\s+/)
         const scoredChunks = chunks
           .map((chunk) => {
             const text = chunk.chunk_text.toLowerCase()
-            const score = queryWords.filter((word) => text.includes(word)).length
+            const score = queryWords.filter((word: string) => text.includes(word)).length
             return { ...chunk, score }
           })
           .sort((a, b) => b.score - a.score)
@@ -74,18 +89,28 @@ export async function POST(request: Request) {
     const systemPrompt = getSystemPrompt(settings)
     const fullPrompt = buildRAGPrompt(query, contexts, systemPrompt)
 
-    // Generate response
-    const { text: answer } = await generateText({
-      model: "openai/gpt-4o-mini",
-      prompt: fullPrompt,
-      maxTokens: 2000,
+    // Generate response using OpenRouter
+    const { content: answer } = await openrouterChat({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: fullPrompt },
+      ],
+      modelList: PAID_MODELS,
+      temperature: 0.5,
+      max_tokens: 2000,
     })
 
     // Generate follow-up questions
-    const { text: questionsText } = await generateText({
-      model: "openai/gpt-4o-mini",
-      prompt: `Based on this Q&A, suggest 3 brief follow-up questions the student might ask:\n\nQuestion: ${query}\n\nAnswer: ${answer}\n\nProvide just the questions, one per line, no numbering.`,
-      maxTokens: 200,
+    const { content: questionsText } = await openrouterChat({
+      messages: [
+        {
+          role: "user",
+          content: `Based on this Q&A, suggest 3 brief follow-up questions the student might ask:\n\nQuestion: ${query}\n\nAnswer: ${answer}\n\nProvide just the questions, one per line, no numbering.`,
+        },
+      ],
+      modelList: PAID_MODELS,
+      temperature: 0.5,
+      max_tokens: 200,
     })
 
     const suggestedQuestions = questionsText
@@ -97,15 +122,13 @@ export async function POST(request: Request) {
     // Save messages to chat if chatId provided
     let messageId = null
     if (chatId) {
-      // Save user message
       await supabase.from("chat_messages").insert({
         chat_id: chatId,
         sender: "user",
         content: query,
       })
 
-      // Save assistant message
-      const { data: assistantMessage } = await supabase
+      const { data: assistantMsg } = await supabase
         .from("chat_messages")
         .insert({
           chat_id: chatId,
@@ -119,23 +142,25 @@ export async function POST(request: Request) {
         .select()
         .single()
 
-      messageId = assistantMessage?.id
-
-      // Update chat timestamp
-      await supabase.from("chats").update({ updated_at: new Date().toISOString() }).eq("id", chatId)
+      if (assistantMsg) {
+        messageId = assistantMsg.id
+      }
     }
 
     return NextResponse.json({
       answer,
-      sources: contexts.map((c) => c.noteTitle).filter(Boolean),
-      suggested_questions: suggestedQuestions,
+      suggestedQuestions,
+      sources: contexts.map((c) => ({
+        text: c.text.slice(0, 150) + "...",
+        noteTitle: c.noteTitle,
+      })),
       messageId,
     })
   } catch (error) {
-    console.error("AI ask error:", error)
+    console.error("AI ask route error:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate response" },
-      { status: 500 },
+      { error: error instanceof Error ? error.message : "Failed to generate answer" },
+      { status: 500 }
     )
   }
 }

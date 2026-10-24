@@ -220,7 +220,7 @@ export function SettingsClient({ user, initialSettings }: SettingsClientProps) {
             <Label htmlFor="explain_level">Explanation Level</Label>
             <Select
               value={settings.explain_level}
-              onValueChange={(v) => setSettings((s) => ({ ...s, explain_level: v }))}
+              onValueChange={(v) => setSettings((s) => ({ ...s, explain_level: v as "beginner" | "intermediate" | "advanced" }))}
             >
               <SelectTrigger className="rounded-xl">
                 <SelectValue />

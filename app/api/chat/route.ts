@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { openrouterChat, PAID_MODELS } from "@/lib/ai/openrouter"
+import { checkAndUpdateNoteUsage } from "@/lib/usage-guard"
 
 // Simple in-memory rate limiter to prevent overwhelming the API
 const requestQueue: { resolve: (v: any) => void; reject: (e: any) => void; fn: () => Promise<string> }[] = []
@@ -101,6 +102,22 @@ export async function POST(request: Request) {
 
     if (chatError || !chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 })
+    }
+
+    // Usage Guard Check
+    const effectiveNoteId = noteId || chat.note_id
+    const usageCheck = await checkAndUpdateNoteUsage(supabase, user.id, effectiveNoteId)
+    if (!usageCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: usageCheck.error,
+          code: "LIMIT_EXCEEDED",
+          plan: usageCheck.plan,
+          limit: usageCheck.limit,
+          currentCount: usageCheck.currentCount,
+        },
+        { status: 403 }
+      )
     }
 
     // Save user message

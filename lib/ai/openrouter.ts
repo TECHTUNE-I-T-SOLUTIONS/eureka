@@ -21,7 +21,17 @@ export const PAID_MODELS = [
   // Add more as desired
 ];
 
-export async function openrouterChat({ messages, modelList = PAID_MODELS, temperature = 0.7, max_tokens = 2048 }) {
+export async function openrouterChat({
+  messages,
+  modelList = PAID_MODELS,
+  temperature = 0.7,
+  max_tokens = 2048,
+}: {
+  messages: Array<{ role: string; content: string }>;
+  modelList?: string[];
+  temperature?: number;
+  max_tokens?: number;
+}) {
   for (const model of modelList) {
     try {
       const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {

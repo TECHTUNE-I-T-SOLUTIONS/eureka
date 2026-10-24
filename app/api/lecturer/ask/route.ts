@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { generateLecturerResponse, LECTURER_MODELS } from "@/lib/ai/gemini-live"
+import { checkAndUpdateNoteUsage } from "@/lib/usage-guard"
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +20,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Usage Guard Check
+    const usageCheck = await checkAndUpdateNoteUsage(supabase, user.id, noteId, noteContext)
+    if (!usageCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: usageCheck.error,
+          code: "LIMIT_EXCEEDED",
+          plan: usageCheck.plan,
+          limit: usageCheck.limit,
+          currentCount: usageCheck.currentCount,
+        },
+        { status: 403 }
+      )
+    }
+
     // If noteId is provided but noteContext isn't, fetch it
     let context = noteContext
     if (noteId && !context) {
@@ -30,7 +46,7 @@ export async function POST(request: Request) {
         .limit(20)
 
       if (chunks && chunks.length > 0) {
-        const noteData = chunks[0].notes as { title: string } | null
+        const noteData = (chunks[0].notes as unknown) as { title: string } | null
         const noteTitle = noteData?.title || "Note"
         context = `Note: ${noteTitle}\n\n${chunks.map((c) => c.chunk_text).join("\n\n")}`
       }

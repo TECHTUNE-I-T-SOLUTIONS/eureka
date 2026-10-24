@@ -44,24 +44,26 @@ export function NotesListClient({ initialNotes }: NotesListClientProps) {
           table: "notes",
         },
         (payload) => {
-          console.log("[Notes List] Real-time update:", payload.eventType, payload.new?.id)
+          const newNote = payload.new as Note | undefined
+          const oldNote = payload.old as { id: string } | undefined
+          console.log("[Notes List] Real-time update:", payload.eventType, newNote?.id)
           
-          if (payload.eventType === "UPDATE") {
+          if (payload.eventType === "UPDATE" && newNote) {
             setNotes((prev) =>
               prev.map((note) =>
-                note.id === payload.new.id 
-                  ? { ...note, ...payload.new } 
+                note.id === newNote.id
+                  ? { ...note, ...newNote }
                   : note
               )
             )
-          } else if (payload.eventType === "INSERT") {
+          } else if (payload.eventType === "INSERT" && newNote) {
             // Don't add duplicate if already exists
             setNotes((prev) => {
-              const exists = prev.some((n) => n.id === payload.new.id)
-              return exists ? prev : [payload.new, ...prev]
+              const exists = prev.some((n) => n.id === newNote.id)
+              return exists ? prev : [newNote, ...prev]
             })
-          } else if (payload.eventType === "DELETE") {
-            setNotes((prev) => prev.filter((note) => note.id !== payload.old.id))
+          } else if (payload.eventType === "DELETE" && oldNote) {
+            setNotes((prev) => prev.filter((note) => note.id !== oldNote.id))
           }
         }
       )

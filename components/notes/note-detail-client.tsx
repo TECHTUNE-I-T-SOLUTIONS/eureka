@@ -71,15 +71,15 @@ export function NoteDetailClient({ note: initialNote, chunks: initialChunks }: N
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            setChunks((prev) => [...prev, payload.new])
+            setChunks((prev) => [...prev, payload.new as Chunk])
           } else if (payload.eventType === "UPDATE") {
             setChunks((prev) =>
               prev.map((chunk) =>
-                chunk.id === payload.new.id ? { ...chunk, ...payload.new } : chunk
+                chunk.id === (payload.new as Chunk).id ? { ...chunk, ...(payload.new as Chunk) } : chunk
               )
             )
           } else if (payload.eventType === "DELETE") {
-            setChunks((prev) => prev.filter((chunk) => chunk.id !== payload.old.id))
+            setChunks((prev) => prev.filter((chunk) => chunk.id !== (payload.old as { id: string }).id))
           }
         }
       )

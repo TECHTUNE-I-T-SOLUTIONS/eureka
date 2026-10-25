@@ -22,6 +22,14 @@ export async function createMobileClient(request: Request) {
     }
   )
 
+  // Attach accessToken so client.auth.getUser() decodes the mobile JWT
+  if (accessToken) {
+    const originalGetUser = client.auth.getUser.bind(client.auth)
+    client.auth.getUser = async (jwt?: string) => {
+      return originalGetUser(jwt || accessToken)
+    }
+  }
+
   return client
 }
 

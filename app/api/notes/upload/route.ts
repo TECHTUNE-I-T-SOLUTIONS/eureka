@@ -57,8 +57,32 @@ export async function POST(request: Request) {
     } else {
       const body = await request.json()
       title = body.title
-      content = body.content
+      content = body.content || ""
       uploadedVia = body.uploadedVia || "text"
+
+      // Handle base64 file sent from mobile
+      if (body.file?.base64) {
+        try {
+          const buffer = Buffer.from(body.file.base64, "base64")
+          const fileName = body.file.name || "document.pdf"
+          const mimeType = body.file.type || (fileName.endsWith(".pdf") ? "application/pdf" : "text/plain")
+
+          // 1. Upload to Cloudinary
+          fileUrl = await uploadToCloudinary(buffer, fileName)
+
+          // 2. Parse document text from buffer
+          const extractedText = await parseDocumentBuffer(buffer, fileName, mimeType)
+          if (extractedText && extractedText.trim().length > 0) {
+            content = extractedText
+          }
+
+          if (!title) {
+            title = fileName.replace(/\.[^/.]+$/, "")
+          }
+        } catch (fileErr) {
+          console.error("Base64 file processing error:", fileErr)
+        }
+      }
     }
 
     if (!title) {

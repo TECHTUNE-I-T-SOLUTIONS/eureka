@@ -1,9 +1,9 @@
 import { v2 as cloudinary } from "cloudinary"
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "dymijedjv",
-  api_key: process.env.CLOUDINARY_API_KEY || "169529353461769",
-  api_secret: process.env.CLOUDINARY_API_SECRET || "uoL2OtqGiKSW9Xg1Hqi8AqQd_YA",
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "",
+  api_key: process.env.CLOUDINARY_API_KEY || "",
+  api_secret: process.env.CLOUDINARY_API_SECRET || "",
 })
 
 export async function uploadToCloudinary(buffer: Buffer, fileName: string): Promise<string | null> {
@@ -38,6 +38,18 @@ export async function parseDocumentBuffer(
   const isPdf = mimeType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")
 
   if (isPdf) {
+    // 1. Primary: Use dedicated Node.js pdf-parse engine (fast, robust, full text extraction)
+    try {
+      const pdfParse = require("pdf-parse")
+      const data = await pdfParse(buffer)
+      if (data?.text && data.text.trim().length > 0) {
+        return data.text.trim()
+      }
+    } catch (parseErr) {
+      console.warn("pdf-parse failed, falling back to pdfjs-dist:", parseErr)
+    }
+
+    // 2. Secondary fallback: pdfjs-dist
     try {
       const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
       const loadingTask = pdfjsLib.getDocument({
@@ -87,7 +99,7 @@ export async function parseDocumentBuffer(
       }
     }
 
-    // Fallback if PDF parsing returned empty or threw
+    // 3. Last-resort ASCII fallback
     const rawString = buffer.toString("utf-8")
     const cleanAscii = rawString.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s+/g, " ")
     if (cleanAscii.trim().length > 50) {

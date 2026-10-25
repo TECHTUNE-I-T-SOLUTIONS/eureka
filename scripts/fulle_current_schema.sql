@@ -63,7 +63,7 @@ CREATE TABLE public.chat_messages (
 CREATE TABLE public.notifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  type text NOT NULL CHECK (type = ANY (ARRAY['chunks_processed'::text, 'note_ready'::text, 'system'::text, 'info'::text])),
+  type text NOT NULL CHECK (type = ANY (ARRAY['chunks_processed'::text, 'note_ready'::text, 'system'::text, 'info'::text, 'subscription'::text])),
   title text NOT NULL,
   message text NOT NULL,
   payload jsonb DEFAULT '{}'::jsonb,
@@ -117,4 +117,29 @@ CREATE TABLE public.lecture_messages (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT lecture_messages_pkey PRIMARY KEY (id),
   CONSTRAINT lecture_messages_lecture_id_fkey FOREIGN KEY (lecture_id) REFERENCES public.lectures(id)
+);
+CREATE TABLE public.subscriptions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  plan text NOT NULL DEFAULT 'free'::text CHECK (plan = ANY (ARRAY['free'::text, 'pro'::text, 'premium'::text])),
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'canceled'::text, 'past_due'::text, 'expired'::text])),
+  paystack_reference text,
+  plan_code text,
+  current_period_end timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.note_usage (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  note_id uuid,
+  request_count integer NOT NULL DEFAULT 0,
+  content_hash text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT note_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT note_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT note_usage_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.notes(id)
 );

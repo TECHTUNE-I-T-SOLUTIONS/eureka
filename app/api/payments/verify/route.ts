@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Transaction reference is required" }, { status: 400 })
     }
 
-    return await verifyAndActivateSubscription(reference)
+    return await verifyAndActivateSubscription(reference, request)
   } catch (error) {
     console.error("Payment verification POST error:", error)
     return NextResponse.json(
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Transaction reference is required" }, { status: 400 })
     }
 
-    return await verifyAndActivateSubscription(reference)
+    return await verifyAndActivateSubscription(reference, request)
   } catch (error) {
     console.error("Payment verification GET error:", error)
     return NextResponse.json(
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   }
 }
 
-async function verifyAndActivateSubscription(reference: string) {
+async function verifyAndActivateSubscription(reference: string, request: Request) {
   const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY
 
   if (!paystackSecretKey) {
@@ -71,24 +71,22 @@ async function verifyAndActivateSubscription(reference: string) {
   const metadata = paystackData.data.metadata || {}
   const plan = metadata.plan || "pro"
 
-  // Try to get authenticated user or fallback to metadata.user_id
-  const supabase = await createClient()
+  // Try to get authenticated user (supports both web cookies and mobile Bearer token)
+  const supabase = await createHybridClient(request)
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Resolve target user: auth user → metadata.user_id (UUID) → lookup by email
   let targetUserId = user?.id || metadata.user_id
 
   if (!targetUserId && metadata.email) {
-    // Lookup user by email if user_id wasn't in metadata
+    // Lookup user by email via admin client
     const adminClient = createAdminClient()
-    const { data: userData } = await adminClient
-      .from("user_settings")
-      .select("id")
-      .eq("id", metadata.email)
-      .maybeSingle()
-    if (userData) {
-      targetUserId = userData.id
+    const { data: usersData } = await adminClient.auth.admin.listUsers()
+    const foundUser = usersData?.users?.find((u) => u.email === metadata.email)
+    if (foundUser) {
+      targetUserId = foundUser.id
     }
   }
 

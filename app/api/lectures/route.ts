@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   try {
     const { noteId, title, explanationLevel } = await request.json()
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -61,6 +61,47 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(lecture)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+
+    if (!id) {
+      return NextResponse.json({ error: "Lecture ID required" }, { status: 400 })
+    }
+
+    const supabase = await createHybridClient(request)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Delete associated messages first
+    await supabase.from("lecture_messages").delete().eq("lecture_id", id)
+
+    // Delete lecture
+    const { error } = await supabase
+      .from("lectures")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },

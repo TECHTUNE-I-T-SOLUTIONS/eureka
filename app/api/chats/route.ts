@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   try {
     const { title, noteId } = await request.json()
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -76,7 +76,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Chat ID is required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()

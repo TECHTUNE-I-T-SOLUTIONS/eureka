@@ -1,17 +1,17 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 import { generateLecturerResponse, LECTURER_MODELS } from "@/lib/ai/gemini-live"
 import { checkAndUpdateNoteUsage } from "@/lib/usage-guard"
 
 export async function POST(request: Request) {
   try {
-    const { question, noteId, noteContext, explanationLevel = "intermediate" } = await request.json()
+    const { question, noteId, noteContext, explanationLevel = "intermediate", lectureId } = await request.json()
 
     if (!question && !noteContext) {
       return NextResponse.json({ error: "Question or note context required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -52,6 +52,16 @@ export async function POST(request: Request) {
       }
     }
 
+    // Save user message to lecture_messages if lectureId is provided
+    if (lectureId) {
+      await supabase.from("lecture_messages").insert({
+        lecture_id: lectureId,
+        sender: "user",
+        content: question,
+        metadata: {},
+      })
+    }
+
     // Try Gemini first (FREE tier)
     try {
       const response = await generateLecturerResponse(question, {
@@ -61,10 +71,23 @@ export async function POST(request: Request) {
         model: LECTURER_MODELS.GEMINI_3_5_FLASH_LITE,
       })
 
+      const answerText = response.text
+
+      // Save assistant message to lecture_messages if lectureId is provided
+      if (lectureId) {
+        await supabase.from("lecture_messages").insert({
+          lecture_id: lectureId,
+          sender: "assistant",
+          content: answerText,
+          metadata: { model: "gemini" },
+        })
+      }
+
       return NextResponse.json({
-        answer: response.text,
+        answer: answerText,
         suggestedQuestions: response.suggestedQuestions,
         model: "gemini",
+        lectureId: lectureId || null,
       })
     } catch (geminiError) {
       console.error("Gemini API error, falling back to OpenRouter:", geminiError)
@@ -107,10 +130,21 @@ export async function POST(request: Request) {
         .filter((q) => q.length > 0)
         .slice(0, 3)
 
+      // Save assistant message to lecture_messages if lectureId is provided
+      if (lectureId) {
+        await supabase.from("lecture_messages").insert({
+          lecture_id: lectureId,
+          sender: "assistant",
+          content: result.content,
+          metadata: { model: "openrouter" },
+        })
+      }
+
       return NextResponse.json({
         answer: result.content,
         suggestedQuestions,
         model: "openrouter",
+        lectureId: lectureId || null,
       })
     }
   } catch (error) {

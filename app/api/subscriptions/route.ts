@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 import { PLAN_LIMITS } from "@/lib/usage-guard"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()

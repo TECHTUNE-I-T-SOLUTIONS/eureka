@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 import { openrouterChat, PAID_MODELS } from "@/lib/ai/openrouter"
 import { checkAndUpdateNoteUsage } from "@/lib/usage-guard"
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chat ID and message are required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()

@@ -3,12 +3,15 @@ import { NextResponse } from "next/server"
 import { uploadToCloudinary, parseDocumentBuffer } from "@/lib/utils/document-parser"
 
 async function getAuthUser(request: Request, supabase: any) {
-  const authHeader = request.headers.get("authorization")
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    const token = authHeader.substring(7).trim()
-    if (token) {
-      const { data: { user }, error } = await supabase.auth.getUser(token)
-      if (user && !error) return user
+  const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
+  if (authHeader) {
+    const parts = authHeader.split(" ")
+    if (parts.length === 2 && parts[0].toLowerCase() === "bearer") {
+      const token = parts[1].trim()
+      if (token) {
+        const { data: { user }, error } = await supabase.auth.getUser(token)
+        if (user && !error) return user
+      }
     }
   }
   const { data: { user } } = await supabase.auth.getUser()
@@ -34,7 +37,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(notes)
+    return NextResponse.json(notes || [])
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },

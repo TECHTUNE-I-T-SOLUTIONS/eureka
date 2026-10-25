@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { lectureId } = await params
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -43,7 +43,7 @@ export async function POST(
     const { lectureId } = await params
     const { sender, content, metadata } = await request.json()
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()

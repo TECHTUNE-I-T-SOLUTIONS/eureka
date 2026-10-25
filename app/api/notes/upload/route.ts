@@ -1,26 +1,13 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 import { uploadToCloudinary, parseDocumentBuffer } from "@/lib/utils/document-parser"
 import { chunkText } from "@/lib/utils/chunker"
 import { openrouterChat, PAID_MODELS } from "@/lib/ai/openrouter"
 
-async function getAuthUser(request: Request, supabase: any) {
-  const authHeader = request.headers.get("authorization")
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    const token = authHeader.substring(7).trim()
-    if (token) {
-      const { data: { user }, error } = await supabase.auth.getUser(token)
-      if (user && !error) return user
-    }
-  }
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
-}
-
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
-    const user = await getAuthUser(request, supabase)
+    const supabase = await createHybridClient(request)
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

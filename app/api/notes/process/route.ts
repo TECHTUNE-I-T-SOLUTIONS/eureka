@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createHybridClient } from "@/lib/supabase/mobile-server"
 import { NextResponse } from "next/server"
 import { chunkText } from "@/lib/utils/chunker"
 import { openrouterChat, PAID_MODELS } from "@/lib/ai/openrouter"
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Note ID required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createHybridClient(request)
     const {
       data: { user },
     } = await supabase.auth.getUser()

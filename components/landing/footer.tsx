@@ -58,6 +58,13 @@ export function Footer() {
                     </Link>
                   </motion.div>
                 </StaggerItem>
+                <StaggerItem>
+                  <motion.div whileHover={{ x: 5 }}>
+                    <Link href="/app" className="hover:text-foreground transition-colors block">
+                      App
+                    </Link>
+                  </motion.div>
+                </StaggerItem>
               </nav>
             </div>
           </StaggerContainer>

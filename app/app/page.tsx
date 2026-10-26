@@ -1,8 +1,11 @@
 'use client';
 
+import { Navbar } from "@/components/layout/navbar"
+import { Footer } from "@/components/landing/footer"
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { createClient } from "@/lib/supabase/client"
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -73,10 +76,11 @@ const requirements = [
   { icon: <Smartphone className="w-4 h-4" />, label: 'Android 10.0+' },
   { icon: <HardDrive className="w-4 h-4" />, label: '50 MB Free Storage' },
   { icon: <Wifi className="w-4 h-4" />, label: 'Internet Connection Required' },
-  { icon: <BookOpen className="w-4 h-4" />, label: 'Supports PDF, DOCX, TXT' },
+  { icon: <BookOpen className="w-4 h-4" />, label: 'Supports PDF, TXT, MD' },
 ];
 
 export default function AppDownloadPage() {
+  const [user, setUser] = useState<any>(null)
   const [release, setRelease] = useState<Release | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -94,6 +98,17 @@ export default function AppDownloadPage() {
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setUser(user)
+    }
+    getUser()
+  }, [])
 
   const apkAsset = release?.assets.find((a) => a.name.endsWith('.apk'));
 
@@ -115,19 +130,7 @@ export default function AppDownloadPage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-[#0B0F19] dark:via-[#0f1729] dark:to-[#0B0F19]">
       {/* Header */}
-      <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/Eureka-01.png" alt="Eureka" width={32} height={32} className="rounded-lg" />
-            <span className="font-bold text-slate-900 dark:text-white text-lg">Eureka</span>
-          </Link>
-          <nav className="hidden sm:flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
-            <Link href="/" className="hover:text-slate-900 dark:hover:text-white transition-colors">Home</Link>
-            <Link href="/pricing" className="hover:text-slate-900 dark:hover:text-white transition-colors">Pricing</Link>
-            <Link href="/auth" className="hover:text-slate-900 dark:hover:text-white transition-colors">Sign In</Link>
-          </nav>
-        </div>
-      </header>
+      <Navbar user={user} />
 
       <div className="max-w-4xl mx-auto px-4 py-16">
 
@@ -248,16 +251,9 @@ export default function AppDownloadPage() {
           ))}
         </div>
 
-        {/* Footer */}
-        <footer className="border-t border-slate-200/60 dark:border-slate-800/60 pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-          <span>© 2026 Eureka Academic Technologies. All rights reserved.</span>
-          <div className="flex gap-4">
-            <Link href="/terms" className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors">Terms</Link>
-            <Link href="/privacy" className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors">Privacy</Link>
-            <Link href="/" className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors">Web App</Link>
-          </div>
-        </footer>
       </div>
+      {/* Footer */}
+      <Footer />
     </main>
   );
 }

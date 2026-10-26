@@ -1,24 +1,24 @@
 // OpenRouter API utility for Eureka
-// Only uses paid models, tries multiple in order
+// Tries high-quality models first, then falls back to free models when credits are low
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const APP_TITLE = process.env.NEXT_PUBLIC_APP_TITLE || "Eureka";
 
-// List of paid models to try (updated 2025 - use current available models)
+// List of models to try in priority order
 export const PAID_MODELS = [
-  "openai/gpt-4o-mini", // OpenAI GPT-4o Mini (cheaper, good performance)
-  "openai/gpt-4o", // OpenAI GPT-4o
-  "anthropic/claude-3.5-sonnet", // Claude 3.5 Sonnet
-  "anthropic/claude-3.5-haiku", // Claude 3.5 Haiku
-  "anthropic/claude-haiku-4.5", // Claude Haiku 4.5
-  "google/gemini-2.0-flash-exp", // Gemini 2.0 Flash Experimental
-  "google/gemini-1.5-flash", // Gemini 1.5 Flash
-  "meta-llama/llama-3.3-70b-instruct", // Llama 3.3 70B
-  "mistralai/mistral-large-2402", // Mistral Large 2402
-  "qwen/qwen-2.5-72b-instruct", // Qwen 2.5 72B
-  // Add more as desired
+  "openai/gpt-4o-mini",
+  "openai/gpt-4o",
+  "anthropic/claude-3.5-sonnet",
+  "anthropic/claude-3.5-haiku",
+  "anthropic/claude-haiku-4.5",
+  "meta-llama/llama-3.3-70b-instruct",
+  "qwen/qwen-2.5-72b-instruct",
+  // Resilient free fallbacks when credits are low or exhausted
+  "recursive/flint-v1.0:free",
+  "liquid/lfm-2.5-2.6b:free",
+  "google/gemma-4-26b-a4b-it:free",
 ];
 
 export async function openrouterChat({
@@ -34,6 +34,9 @@ export async function openrouterChat({
 }) {
   for (const model of modelList) {
     try {
+      // Free models often enforce smaller token windows (e.g. 500-1000 tokens)
+      const effectiveMaxTokens = model.includes(":free") ? Math.min(max_tokens, 1000) : max_tokens;
+
       const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: {
@@ -46,7 +49,7 @@ export async function openrouterChat({
           model,
           messages,
           temperature,
-          max_tokens,
+          max_tokens: effectiveMaxTokens,
         }),
       });
       if (!response.ok) {

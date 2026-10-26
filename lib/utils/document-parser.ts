@@ -30,6 +30,23 @@ export async function uploadToCloudinary(buffer: Buffer, fileName: string): Prom
   }
 }
 
+export function cleanExtractedText(raw: string): string {
+  if (!raw) return ""
+
+  return raw
+    // Replace null bytes and non-printable control characters (except newline \n and tab \t)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "")
+    // Normalize unicode space characters
+    .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, " ")
+    // Fix hyphenated word breaks at end of line (e.g. "meth- \nodology" -> "methodology")
+    .replace(/(\w+)-\s*\n\s*(\w+)/g, "$1$2")
+    // Replace multiple spaces or tabs on a line with a single space
+    .replace(/[ \t]+/g, " ")
+    // Replace excessive blank lines with at most two newlines
+    .replace(/\n\s*\n\s*\n+/g, "\n\n")
+    .trim()
+}
+
 export async function parseDocumentBuffer(
   buffer: Buffer,
   fileName: string,
@@ -38,76 +55,48 @@ export async function parseDocumentBuffer(
   const isPdf = mimeType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")
 
   if (isPdf) {
-    // 1. Primary: Use dedicated Node.js pdf-parse engine (fast, robust, full text extraction)
+    // 1. Primary: Use unpdf (lightweight, zero-worker pdfjs engine optimized for Next.js / serverless / Node)
     try {
-      const pdfParse = require("pdf-parse")
-      const data = await pdfParse(buffer)
-      if (data?.text && data.text.trim().length > 0) {
-        return data.text.trim()
+      const { extractText } = require("unpdf")
+      const result = await extractText(new Uint8Array(buffer), { mergePages: true })
+      const text = Array.isArray(result.text) ? result.text.join("\n\n") : (result.text || "")
+      if (text && text.trim().length > 0) {
+        const cleaned = cleanExtractedText(text)
+        if (cleaned.length > 20) {
+          return cleaned
+        }
       }
-    } catch (parseErr) {
-      console.warn("pdf-parse failed, falling back to pdfjs-dist:", parseErr)
+    } catch (unpdfErr) {
+      console.warn("unpdf extraction failed, falling back to pdf2json / pdf-parse:", unpdfErr)
     }
 
-    // 2. Secondary fallback: pdfjs-dist
+    // 2. Secondary fallback: pdf2json (pure JS parser, no web-worker or external file dependencies)
     try {
-      const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
-      const loadingTask = pdfjsLib.getDocument({
-        data: new Uint8Array(buffer),
-        useSystemFonts: true,
-        disableFontFace: true,
+      const PDFParser = require("pdf2json")
+      const text = await new Promise<string>((resolve, reject) => {
+        const pdfParser = new PDFParser(null, 1)
+        pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError))
+        pdfParser.on("pdfParser_dataReady", () => {
+          const rawText = pdfParser.getRawTextContent()
+          resolve(rawText || "")
+        })
+        pdfParser.parseBuffer(buffer)
       })
-      const pdfDoc = await loadingTask.promise
-      let extractedText = ""
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i)
-        const textContent = await page.getTextContent()
-        const pageText = textContent.items
-          .map((item: any) => item.str || "")
-          .filter(Boolean)
-          .join(" ")
-        if (pageText.trim()) {
-          extractedText += pageText + "\n\n"
+
+      if (text && text.trim().length > 0) {
+        const cleaned = cleanExtractedText(text)
+        if (cleaned.length > 20) {
+          return cleaned
         }
       }
-      if (extractedText.trim().length > 0) {
-        return extractedText.trim()
-      }
-    } catch (pdfErr) {
-      console.warn("PDF.js legacy import failed, trying standard import:", pdfErr)
-      try {
-        const pdfjsLib = await import("pdfjs-dist")
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) })
-        const pdfDoc = await loadingTask.promise
-        let extractedText = ""
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
-          const page = await pdfDoc.getPage(i)
-          const textContent = await page.getTextContent()
-          const pageText = textContent.items
-            .map((item: any) => item.str || "")
-            .filter(Boolean)
-            .join(" ")
-          if (pageText.trim()) {
-            extractedText += pageText + "\n\n"
-          }
-        }
-        if (extractedText.trim().length > 0) {
-          return extractedText.trim()
-        }
-      } catch (err2) {
-        console.error("PDF parsing failed:", err2)
-      }
+    } catch (pdf2jsonErr) {
+      console.warn("pdf2json parsing failed:", pdf2jsonErr)
     }
 
-    // 3. Last-resort ASCII fallback
-    const rawString = buffer.toString("utf-8")
-    const cleanAscii = rawString.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s+/g, " ")
-    if (cleanAscii.trim().length > 50) {
-      return cleanAscii.trim()
-    }
-    return `[Parsed PDF Document: ${fileName}]`
+    // 3. Fallback if PDF was an image scan or unextractable font
+    return `[Attached PDF Document: ${fileName}]\nThis document appears to contain scanned images or protected vector drawings without extractable text streams. Eureka AI will utilize document metadata and title to generate your study materials.`
   }
 
   // TXT or MD file
-  return buffer.toString("utf-8")
+  return cleanExtractedText(buffer.toString("utf-8"))
 }

@@ -59,7 +59,8 @@
     "next": "16.0.7",
     "next-themes": "latest",
     "nodemailer": "^10.2.1",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.1",
+    "pdf2json": "^4.0.3",
     "pdfjs-dist": "^5.4.449",
     "react": "19.2.0",
     "react-day-picker": "9.8.0",
@@ -73,6 +74,7 @@
     "sonner": "latest",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "unpdf": "^1.9.1",
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
     "zod": "3.25.76"

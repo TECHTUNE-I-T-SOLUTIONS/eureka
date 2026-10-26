@@ -7,7 +7,7 @@ import { FadeInUp, FloatingIcon, StaggerContainer, StaggerItem } from "@/compone
 export function Footer() {
   return (
     <footer className="border-t border-border/50 bg-background">
-      <div className="mx-auto max-w-6xl px-4 py-12">
+      <div className="mx-auto max-w-auto px-4 py-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
           <StaggerContainer delay={0}>
@@ -76,20 +76,6 @@ export function Footer() {
                     </Link>
                   </motion.div>
                 </StaggerItem>
-                <StaggerItem>
-                  <motion.div whileHover={{ x: 5 }}>
-                    <Link href="#" className="hover:text-foreground transition-colors block">
-                      Blog
-                    </Link>
-                  </motion.div>
-                </StaggerItem>
-                <StaggerItem>
-                  <motion.div whileHover={{ x: 5 }}>
-                    <Link href="#" className="hover:text-foreground transition-colors block">
-                      Roadmap
-                    </Link>
-                  </motion.div>
-                </StaggerItem>
               </nav>
             </div>
           </StaggerContainer>
@@ -127,7 +113,7 @@ export function Footer() {
           </FadeInUp>
           <div className="flex gap-4">
             <motion.a
-              href="#"
+              href="https://github.com/TECHTUNE-I-T-SOLUTIONS/eureka"
               title="GitHub"
               whileHover={{ scale: 1.2, y: -3 }}
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -138,18 +124,7 @@ export function Footer() {
               </svg>
             </motion.a>
             <motion.a
-              href="#"
-              title="Twitter"
-              whileHover={{ scale: 1.2, y: -3 }}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <span className="sr-only">Twitter</span>
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2s9 5 20 5a9.5 9.5 0 00-9-5.5c4.75 2.25 7-7 7-7a1.7 1.7 0 00-1-2z" />
-              </svg>
-            </motion.a>
-            <motion.a
-              href="#"
+              href="https://www.linkedin.com/in/techtune-i-t-solutions/"
               title="LinkedIn"
               whileHover={{ scale: 1.2, y: -3 }}
               className="text-muted-foreground hover:text-foreground transition-colors"

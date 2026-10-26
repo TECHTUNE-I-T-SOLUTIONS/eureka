@@ -93,10 +93,6 @@ export async function POST(request: Request) {
       content = `[Empty document content uploaded at ${new Date().toISOString()}]`
     }
 
-    if (fileUrl) {
-      content = `${content}\n\n[Cloudinary File Source: ${fileUrl}]`
-    }
-
     // 3. Save note to Supabase with status 'processing'
     const { data: note, error: insertError } = await supabase
       .from("notes")

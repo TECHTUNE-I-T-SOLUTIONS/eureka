@@ -50,8 +50,8 @@ export function Navbar({ user }: NavbarProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
-        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+        <nav className="mx-auto flex h-16 max-w-auto items-center justify-between px-4">
           {/* Logo */}
           <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2">
             <img src="/Eureka-01.png" alt="Eureka" className="h-9 w-9 rounded-xl" />
